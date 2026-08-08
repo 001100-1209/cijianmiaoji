@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>词间妙记 · Words in Bloom</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#e88fae" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="词间妙记" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="petals" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-zh">词间妙记</span>
+      <span class="brand-en">WORDS IN BLOOM</span>
+    </div>
+    <nav class="main-nav" id="mainNav">
+      <button class="nav-btn active" data-view="home"><span class="nav-ico">🏠</span><span class="nav-label">首页</span></button>
+      <button class="nav-btn" data-view="library"><span class="nav-ico">📚</span><span class="nav-label">词集库</span></button>
+      <button class="nav-btn" data-view="immerse"><span class="nav-ico">🪷</span><span class="nav-label">沉浸学习</span></button>
+      <button class="nav-btn" data-view="cards"><span class="nav-ico">🃏</span><span class="nav-label">记忆卡片</span></button>
+      <button class="nav-btn" data-view="quiz"><span class="nav-ico">✏️</span><span class="nav-label">记忆测试</span></button>
+      <button class="nav-btn" data-view="fav"><span class="nav-ico">❤️</span><span class="nav-label">收藏夹</span></button>
+      <button class="nav-btn" data-view="notes"><span class="nav-ico">✍️</span><span class="nav-label">妙计</span></button>
+    </nav>
+    <div class="topbar-right">
+      <button class="icon-btn" id="bloomToggle" title="花影开关">🌸</button>
+      <button class="icon-btn" data-view="settings" title="设置">⚙️</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ===================== 首页 ===================== -->
+    <section id="view-home" class="view active">
+      <div class="hero">
+        <p class="hero-sub">ことばの記憶</p>
+        <h1>词间妙记</h1>
+        <p class="hero-en">Let the words you learn today settle, slowly, into memory.</p>
+        <div class="now-chip" id="nowChip"></div>
+      </div>
+
+      <div class="home-grid">
+        <div class="card dash-card">
+          <h2 class="card-title">全部词集进度</h2>
+          <div class="ring-wrap">
+            <svg class="ring" viewBox="0 0 120 120" width="150" height="150">
+              <circle class="ring-bg" cx="60" cy="60" r="52"></circle>
+              <circle class="ring-fg" id="ringFg" cx="60" cy="60" r="52"></circle>
+            </svg>
+            <div class="ring-text"><b id="ringPct">0%</b><span>已掌握</span></div>
+          </div>
+          <div class="stat-grid" id="statGrid"></div>
+        </div>
+
+        <div class="card quick-card">
+          <h2 class="card-title">快捷入口</h2>
+          <button class="btn primary wide" id="btnContinue">▶ 继续上次进度</button>
+          <button class="btn soft wide" id="btnRandom">🎲 随机 20 词</button>
+          <button class="btn soft wide" id="btnLatest">🌸 学习第 20 组（Lesson 39–40）</button>
+          <button class="btn soft wide" id="btnReviewDue">⏰ 复习待复习词</button>
+          <p class="hint" id="homeHint"></p>
+        </div>
+      </div>
+
+      <div class="home-grid two">
+        <div class="card collection-card" id="currentCollectionCard">
+          <h2 class="card-title">COLLECTION · 最近词集</h2>
+          <div id="currentCollectionBody"></div>
+        </div>
+
+        <div class="card timer-card">
+          <h2 class="card-title">专注时光 <span class="en-sub">A quiet interval beside your words.</span></h2>
+          <div class="timer-modes">
+            <button class="chip-btn active" id="modeFocus">专注</button>
+            <button class="chip-btn" id="modeRest">休息</button>
+          </div>
+          <div class="timer-row">
+            <div class="timer-display" id="timerDisplay">25:00</div>
+            <div class="timer-meta">
+              <div class="timer-presets" id="timerPresets">
+                <button class="chip-btn" data-min="15">15</button>
+                <button class="chip-btn active" data-min="25">25</button>
+                <button class="chip-btn" data-min="45">45</button>
+                <button class="chip-btn" data-min="60">60</button>
+              </div>
+              <div class="timer-adjust">
+                <button class="chip-btn" id="timerMinus">−5</button>
+                <span class="timer-min-label" id="timerMinLabel">25 分钟</span>
+                <button class="chip-btn" id="timerPlus">+5</button>
+              </div>
+              <div class="timer-controls">
+                <button class="btn primary" id="timerStart">开始</button>
+                <button class="btn ghost" id="timerReset">重置</button>
+              </div>
+            </div>
+          </div>
+          <p class="hint">完成一轮专注后，去复习几个待复习的单词吧。</p>
+        </div>
+      </div>
+
+      <div class="card routine-card">
+        <h2 class="card-title">长期学习路径 <span class="en-sub">你的 50 天轮回计划</span></h2>
+        <p class="hint">数字为“组号”（1–20），每组 = 半个单元 = 2 个 lesson：第 1 组=Lesson 1–2、第 2 组=Lesson 3–4 …… 第 20 组=Lesson 39–40。上午新背+复习，晚上复习；1–20 天背完 20 组，21–50 天按艾宾浩斯间隔纯复习。</p>
+        <div class="table-scroll">
+          <div class="routine-blocks" id="routineTable"></div>
+        </div>
+      </div>
+
+      <div class="card mini-row" id="quizSummaryCard" style="display:none">
+        <h2 class="card-title">最近一次测试</h2>
+        <div id="quizSummaryBody"></div>
+      </div>
+    </section>
+
+    <!-- ===================== 词集库 ===================== -->
+    <section id="view-library" class="view">
+      <div class="page-head">
+        <h2>词集库</h2>
+        <p class="sub">Lesson 1–40 · 来自「考研单词-5920」工作表的整理</p>
+      </div>
+      <div class="search-row">
+        <input type="text" id="libSearch" class="search-input" placeholder="搜索单词或释义…（如 ambition / 野心）" />
+        <span class="search-count" id="libSearchCount"></span>
+      </div>
+      <div class="tab-row" id="libTabs">
+        <button class="tab-btn active" data-libtab="unit">按单元（10）</button>
+        <button class="tab-btn" data-libtab="group">按组（20）</button>
+        <button class="tab-btn" data-libtab="lesson">按课时（40）</button>
+      </div>
+      <div class="card-grid" id="libGrid"></div>
+      <div class="card-grid" id="libSearchGrid" style="display:none"></div>
+    </section>
+
+    <!-- ===================== 沉浸学习 ===================== -->
+    <section id="view-immerse" class="view">
+      <div class="page-head">
+        <h2>沉浸学习</h2>
+        <p class="sub">逐词浏览，边看视频边把“妙计”写进每个单词</p>
+        <button class="btn soft sm imm-list-toggle" id="immListToggle">📖 词表</button>
+      </div>
+      <div class="immerse-layout">
+        <aside class="immerse-side card">
+          <div class="side-head">
+            <select id="immScope" class="select-input"></select>
+            <input type="text" id="immSearch" class="search-input sm" placeholder="跳转：搜单词…" />
+            <label class="check-label"><input type="checkbox" id="immUnmasteredFirst" /> 未掌握优先（排在最前）</label>
+          </div>
+          <div class="word-list" id="immList"></div>
+          <div class="side-foot">
+            <button class="btn ghost sm" id="immPrevBtn">‹ 上一个</button>
+            <button class="btn ghost sm" id="immNextBtn">下一个 ›</button>
+          </div>
+        </aside>
+        <div class="immerse-main">
+          <div class="imm-progress">
+            <div class="imm-progress-bar" id="immProgressBar"></div>
+          </div>
+          <div class="imm-position" id="immPosition"></div>
+          <div class="card word-card">
+            <div class="word-meta" id="wordMeta"></div>
+            <div class="word-line">
+              <div class="word-big" id="wordBig"></div>
+              <button class="speak-btn" id="speakImmerse" title="朗读">🔊</button>
+            </div>
+            <div class="meaning-box" id="meaningBox"></div>
+            <div class="note-box">
+              <div class="note-head">
+                <label for="noteInput">✍️ 我的妙计</label>
+                <span class="note-save" id="noteSave">未编辑</span>
+              </div>
+              <textarea id="noteInput" class="note-input" rows="3"
+                placeholder="写下你的谐音、联想、小故事…（内容仅保存在本机浏览器，可随时修改）"></textarea>
+              <p class="note-tip" id="noteTip"></p>
+            </div>
+            <div class="word-actions">
+              <button class="btn bad" id="btnDont">不认识</button>
+              <button class="btn fuzzy" id="btnFuzzy">有点模糊</button>
+              <button class="btn good" id="btnKnow">认识 ✓</button>
+              <button class="btn ghost" id="btnFav">♡ 收藏</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 记忆卡片 ===================== -->
+    <section id="view-cards" class="view">
+      <div class="page-head">
+        <h2>记忆卡片</h2>
+        <p class="sub">点击卡片翻面，然后凭感觉选择“认识 / 模糊 / 不认识”</p>
+      </div>
+      <div class="cards-setup card">
+        <div class="setup-row">
+          <select id="cardScope" class="select-input"></select>
+          <label class="check-label"><input type="checkbox" id="cardShuffle" /> 随机顺序</label>
+          <label class="check-label"><input type="checkbox" id="cardDueFirst" checked /> 待复习优先</label>
+          <button class="btn primary sm" id="cardStart">开始</button>
+        </div>
+        <div class="resume-bar" id="resumeBar" style="display:none">
+          <span id="resumeInfo"></span>
+          <button class="btn primary sm" id="cardResume">继续</button>
+          <button class="btn ghost sm" id="cardRestart">重新开始</button>
+        </div>
+      </div>
+      <div class="card-flip-wrap" id="cardArea" style="display:none">
+        <div class="flip-progress" id="cardProgress"></div>
+        <div class="choice-chip" id="cardChoice"></div>
+        <div class="flip-card" id="flipCard">
+          <div class="flip-inner">
+            <div class="flip-face front">
+              <div class="flip-meta" id="cardMeta"></div>
+              <div class="flip-word" id="cardWord"></div>
+              <button class="speak-btn" id="speakCard" title="朗读">🔊</button>
+              <div class="flip-tip">点击翻面</div>
+            </div>
+            <div class="flip-face back">
+              <div class="flip-meta" id="cardMetaBack"></div>
+              <div class="flip-meaning" id="cardMeaning"></div>
+              <div class="flip-note" id="cardNote"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card-buttons">
+          <button class="btn ghost" id="cardPrev">← 上一个</button>
+          <button class="btn bad" id="cardDont">不认识</button>
+          <button class="btn fuzzy" id="cardFuzzy">有点模糊</button>
+          <button class="btn good" id="cardKnow">认识 ✓</button>
+          <button class="btn ghost" id="cardFav">♡</button>
+          <button class="btn ghost" id="cardNext">下一个 →</button>
+        </div>
+        <div class="card-done" id="cardDone" style="display:none">
+          <p id="cardDoneText"></p>
+          <button class="btn primary" id="cardAgain">再来一轮</button>
+          <button class="btn soft" id="cardWrongAgain" style="display:none">复习错词</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== 记忆测试 ===================== -->
+    <section id="view-quiz" class="view">
+      <div class="page-head">
+        <h2>记忆测试</h2>
+        <p class="sub">四选一，测测刚刚背过的单词</p>
+      </div>
+      <div class="cards-setup card">
+        <div class="setup-row">
+          <select id="quizScope" class="select-input"></select>
+          <select id="quizType" class="select-input">
+            <option value="w2m">看单词选释义</option>
+            <option value="m2w">看释义选单词</option>
+          </select>
+          <select id="quizCount" class="select-input">
+            <option value="10">10 题</option>
+            <option value="20" selected>20 题</option>
+            <option value="40">40 题</option>
+          </select>
+          <button class="btn primary sm" id="quizStart">开始测试</button>
+        </div>
+      </div>
+      <div class="quiz-body card" id="quizBody"></div>
+    </section>
+
+    <!-- ===================== 收藏夹 ===================== -->
+    <section id="view-fav" class="view">
+      <div class="page-head">
+        <h2>收藏夹</h2>
+        <p class="sub">标记 ♥ 的单词都在这里，可随时补充妙计</p>
+      </div>
+      <div class="fav-list" id="favList"></div>
+    </section>
+
+    <!-- ===================== 妙计管理 ===================== -->
+    <section id="view-notes" class="view">
+      <div class="page-head">
+        <h2>妙计手账</h2>
+        <p class="sub">边看视频边记：搜索单词，直接在框里写下你的“妙计”，自动保存</p>
+      </div>
+      <div class="notes-head card">
+        <div class="notes-stat" id="notesStat"></div>
+        <div class="search-row">
+          <input type="text" id="noteSearch" class="search-input" placeholder="搜单词 / 释义 / 妙计…" />
+          <select id="noteFilter" class="select-input">
+            <option value="all">全部</option>
+            <option value="filled">已填妙计</option>
+            <option value="empty">未填妙计</option>
+          </select>
+          <select id="noteUnit" class="select-input">
+            <option value="0">全部单元</option>
+          </select>
+          <button class="btn soft sm" id="noteExport">导出备份</button>
+          <button class="btn ghost sm" id="noteImportBtn">导入备份</button>
+          <input type="file" id="noteImport" accept="application/json" style="display:none" />
+        </div>
+      </div>
+      <div class="notes-list" id="notesList"></div>
+      <div class="load-more-wrap">
+        <button class="btn ghost" id="notesMore" style="display:none">加载更多</button>
+      </div>
+    </section>
+
+    <!-- ===================== 设置 ===================== -->
+    <section id="view-settings" class="view">
+      <div class="page-head">
+        <h2>设置</h2>
+        <p class="sub">数据默认保存在本机浏览器；配置「云端同步」后会自动备份，手机与电脑共用一份</p>
+      </div>
+      <div class="settings-list card">
+        <h2 class="card-title">账号与云端同步 <span class="en-sub">登录后手机与电脑自动同步同一份数据</span></h2>
+        <div id="authArea"></div>
+        <div class="set-row">
+          <div class="set-info">
+            <b>同步状态</b>
+            <span id="syncStatus">未配置</span>
+          </div>
+          <div class="set-control">
+            <button class="btn soft sm" id="syncNowBtn">立即同步</button>
+            <button class="btn ghost sm" id="syncPushBtn">本地覆盖云端</button>
+          </div>
+        </div>
+        <p class="hint" id="syncHint"></p>
+      </div>
+
+      <div class="settings-list card">
+        <div class="set-row">
+          <div class="set-info">
+            <b>花影</b>
+            <span>开启时页面飘落樱花花瓣</span>
+          </div>
+          <label class="switch"><input type="checkbox" id="setBloom" /><span class="slider"></span></label>
+        </div>
+        <div class="set-row">
+          <div class="set-info">
+            <b>沉浸学习自动发音</b>
+            <span>沉浸学习中切换单词时自动朗读（默认关闭）</span>
+          </div>
+          <label class="switch"><input type="checkbox" id="setSpeakImm" /><span class="slider"></span></label>
+        </div>
+        <div class="set-row">
+          <div class="set-info">
+            <b>记忆卡片自动发音</b>
+            <span>记忆卡片翻到新单词时自动朗读（默认开启）</span>
+          </div>
+          <label class="switch"><input type="checkbox" id="setSpeakCard" /><span class="slider"></span></label>
+        </div>
+        <div class="set-row">
+          <div class="set-info">
+            <b>朗读语音</b>
+            <span>带 Online 的是联网语音（有延迟），不带的是本地语音（即时）。可在下方搜索 / 只看离线。</span>
+          </div>
+          <div class="set-control voice-control">
+            <input type="text" id="voiceSearch" class="search-input sm" placeholder="搜索语音，如 Aria / 中文…" />
+            <label class="check-label"><input type="checkbox" id="voiceOfflineOnly" /> 只看离线</label>
+            <select id="setVoice" class="select-input"></select>
+            <button class="btn soft sm" id="voiceTest">试听</button>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-info">
+            <b>语速</b>
+            <span>调慢一些发音更清晰</span>
+          </div>
+          <select id="setRate" class="select-input">
+            <option value="0.7">慢（0.7）</option>
+            <option value="0.85" selected>适中（0.85）</option>
+            <option value="1">正常（1.0）</option>
+            <option value="1.2">稍快（1.2）</option>
+          </select>
+        </div>
+        <div class="set-row">
+          <div class="set-info">
+            <b>导出数据</b>
+            <span>把妙计、进度、收藏备份成 JSON 文件</span>
+          </div>
+          <button class="btn soft sm" id="setExport">导出</button>
+        </div>
+        <div class="set-row">
+          <div class="set-info">
+            <b>导入数据</b>
+            <span>从备份文件恢复（会合并，不删除已有内容）</span>
+          </div>
+          <button class="btn soft sm" id="setImportBtn">导入</button>
+          <input type="file" id="setImport" accept="application/json" style="display:none" />
+        </div>
+        <div class="set-row danger">
+          <div class="set-info">
+            <b>重置全部数据</b>
+            <span>清空妙计、进度、收藏与测试记录（不可恢复）</span>
+          </div>
+          <button class="btn bad sm" id="setReset">重置</button>
+        </div>
+      </div>
+      <div class="card about-card">
+        <h2 class="card-title">关于</h2>
+        <ul>
+          <li>词汇数据：来自桌面文档《英语.xlsx》的「考研单词-5920」工作表，Lesson 1–40 共 2934 个单词，含词群标签。</li>
+          <li>妙计预置：Lesson 1–4 共 118 个单词已填入书中的「联想记忆法」（来自 lesson1~4.txt），可自由修改。</li>
+          <li>轮回计划：数字 1–20 为组号，每组 = 半个单元 = 2 个 lesson；1–20 天新背，21–50 天按艾宾浩斯间隔复习。</li>
+          <li>“妙计”模块：内容由你自己填写（谐音、联想、小故事等），自动保存在本机。</li>
+          <li>学习状态（认识/模糊/不认识）、收藏、测试成绩同样只保存在本机。</li>
+          <li>数据存在浏览器里（localStorage），跟文件夹位置绑定：如果移动整个文件夹，请先“导出备份”，移到新位置后再“导入”。</li>
+          <li>建议配合刘晓艳老师视频与《考研英语你还在背单词吗》使用。</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-foot">词间妙记 · 愿你与单词，慢慢熟稔</footer>
+
+  <script src="js/words.js"></script>
+  <script src="js/book-notes.js"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
