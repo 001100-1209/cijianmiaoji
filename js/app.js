@@ -82,6 +82,9 @@
     s[name] = val;
     store.set(LS.settings, s);
   }
+  function applyTheme() {
+    document.body.dataset.theme = getSetting("theme") || "pink";
+  }
 
   /* ---------------- 语音 ---------------- */
   function speakText(text) {
@@ -842,6 +845,17 @@
     return list;
   }
 
+  function setImmSheet(open) {
+    const side = document.querySelector(".immerse-side");
+    if (!side) return;
+    side.classList.toggle("open", !!open);
+    const bd = document.getElementById("immBackdrop");
+    if (bd) {
+      bd.classList.toggle("show", !!open);
+      bd.style.pointerEvents = open ? "auto" : "none";
+    }
+  }
+
   function rebuildImmList() {
     const key = immList[navState.immIndex] ? wKey(immList[navState.immIndex]) : null;
     immList = buildImmQueue();
@@ -893,10 +907,7 @@
     $$(".word-item", list).forEach((el) =>
       el.addEventListener("click", () => {
         navState.immIndex = Number(el.dataset.i);
-        if (window.innerWidth <= 860) {
-          const side = document.querySelector(".immerse-side");
-          if (side) side.classList.remove("open");
-        }
+        setImmSheet(false);
         renderImmWord();
       })
     );
@@ -937,7 +948,7 @@
       progress[key] ? `<span class="tag">${progress[key].s === "m" ? "已掌握" : "学习中"}</span>` : "",
     ].join("");
     $("#wordBig").textContent = w.w;
-    if (getSetting("autoSpeakImmerse") === true && key !== immLastSpoken) {
+    if (getSetting("autoSpeakImmerse") !== false && key !== immLastSpoken) {
       speakText(w.w);
       immLastSpoken = key;
     }
@@ -1257,6 +1268,7 @@
           quizWrong.push(q.w);
           markWord(q.w, "l");
         }
+        quizIdx++;
         setTimeout(renderQuizQ, 800);
       })
     );
@@ -1427,10 +1439,8 @@
 
   /* ---------------- 设置 ---------------- */
   function renderSettings() {
-    const s = store.get(LS.settings, { bloom: true });
-    $("#setBloom").checked = s.bloom !== false;
-    $("#petals").classList.toggle("off", s.bloom === false);
-    $("#setSpeakImm").checked = getSetting("autoSpeakImmerse") === true;
+    $("#setTheme").value = getSetting("theme") || "pink";
+    $("#setSpeakImm").checked = getSetting("autoSpeakImmerse") !== false;
     $("#setSpeakCard").checked = getSetting("autoSpeakCards") !== false;
     populateVoiceOptions();
     $("#setRate").value = String(getSetting("speakRate") || 0.85);
@@ -1524,8 +1534,10 @@
     $("#immNextBtn").addEventListener("click", () => immStep(1));
     $("#immListToggle").addEventListener("click", () => {
       const side = document.querySelector(".immerse-side");
-      if (side) side.classList.toggle("open");
+      setImmSheet(!(side && side.classList.contains("open")));
     });
+    const immBackdrop = document.getElementById("immBackdrop");
+    if (immBackdrop) immBackdrop.addEventListener("click", () => setImmSheet(false));
     $("#noteInput").addEventListener("input", saveNoteDebounced);
     $("#btnKnow").addEventListener("click", () => {
       const w = immList[navState.immIndex];
@@ -1614,18 +1626,9 @@
     });
 
     // 设置
-    $("#bloomToggle").addEventListener("click", () => {
-      const s = store.get(LS.settings, { bloom: true });
-      s.bloom = s.bloom === false;
-      store.set(LS.settings, s);
-      $("#petals").classList.toggle("off", !s.bloom);
-      $("#setBloom").checked = s.bloom;
-    });
-    $("#setBloom").addEventListener("change", () => {
-      const s = store.get(LS.settings, { bloom: true });
-      s.bloom = $("#setBloom").checked;
-      store.set(LS.settings, s);
-      $("#petals").classList.toggle("off", !s.bloom);
+    $("#setTheme").addEventListener("change", () => {
+      setSetting("theme", $("#setTheme").value);
+      applyTheme();
     });
     $("#setSpeakImm").addEventListener("change", () => {
       setSetting("autoSpeakImmerse", $("#setSpeakImm").checked);
@@ -1725,22 +1728,6 @@
     });
   }
 
-  /* ---------------- 花影 ---------------- */
-  function spawnPetals() {
-    const container = $("#petals");
-    const petals = ["🌸", "🩷", "🌺", "🌸", "🩶"];
-    for (let i = 0; i < 26; i++) {
-      const p = document.createElement("span");
-      p.className = "petal";
-      p.textContent = petals[i % petals.length];
-      p.style.left = Math.random() * 100 + "%";
-      p.style.animationDuration = 9 + Math.random() * 14 + "s";
-      p.style.animationDelay = Math.random() * 14 + "s";
-      p.style.fontSize = 12 + Math.random() * 10 + "px";
-      container.appendChild(p);
-    }
-  }
-
   /* ---------------- 时钟 ---------------- */
   function clock() {
     const now = new Date();
@@ -1770,7 +1757,7 @@
     }
     bindEvents();
     registerSW();
-    spawnPetals();
+    applyTheme();
     if (!("speechSynthesis" in window)) {
       document.body.classList.add("no-tts");
     } else {
@@ -1780,9 +1767,6 @@
       } catch (e) {}
     }
     setTimerDisplay();
-    const s = store.get(LS.settings, { bloom: true });
-    $("#petals").classList.toggle("off", s.bloom === false);
-    $("#setBloom").checked = s.bloom !== false;
     clock();
     setInterval(clock, 1000);
     const hash = location.hash.replace("#", "");

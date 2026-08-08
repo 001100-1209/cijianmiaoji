@@ -13,8 +13,6 @@
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-  <div id="petals" aria-hidden="true"></div>
-
   <header class="topbar">
     <div class="brand">
       <span class="brand-zh">词间妙记</span>
@@ -30,7 +28,6 @@
       <button class="nav-btn" data-view="notes"><span class="nav-ico">✍️</span><span class="nav-label">妙计</span></button>
     </nav>
     <div class="topbar-right">
-      <button class="icon-btn" id="bloomToggle" title="花影开关">🌸</button>
       <button class="icon-btn" data-view="settings" title="设置">⚙️</button>
     </div>
   </header>
@@ -144,6 +141,7 @@
         <p class="sub">逐词浏览，边看视频边把“妙计”写进每个单词</p>
         <button class="btn soft sm imm-list-toggle" id="immListToggle">📖 词表</button>
       </div>
+      <div id="immBackdrop" class="imm-backdrop"></div>
       <div class="immerse-layout">
         <aside class="immerse-side card">
           <div class="side-head">
@@ -329,10 +327,14 @@
       <div class="settings-list card">
         <div class="set-row">
           <div class="set-info">
-            <b>花影</b>
-            <span>开启时页面飘落樱花花瓣</span>
+            <b>外观主题</b>
+            <span>粉色（默认）/ 浅蓝 / 夜间灰</span>
           </div>
-          <label class="switch"><input type="checkbox" id="setBloom" /><span class="slider"></span></label>
+          <select id="setTheme" class="select-input">
+            <option value="pink">粉色（默认）</option>
+            <option value="blue">浅蓝</option>
+            <option value="dark">夜间灰</option>
+          </select>
         </div>
         <div class="set-row">
           <div class="set-info">
