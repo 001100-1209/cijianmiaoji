@@ -948,6 +948,10 @@
       progress[key] ? `<span class="tag">${progress[key].s === "m" ? "已掌握" : "学习中"}</span>` : "",
     ].join("");
     $("#wordBig").textContent = w.w;
+    const prevW = navState.immIndex > 0 ? immList[navState.immIndex - 1] : null;
+    const nextW = navState.immIndex < immList.length - 1 ? immList[navState.immIndex + 1] : null;
+    $("#immWordPrev").textContent = prevW ? `← ${prevW.w}` : "← 上一个";
+    $("#immWordNext").textContent = nextW ? `${nextW.w} →` : "下一个 →";
     if (getSetting("autoSpeakImmerse") !== false && key !== immLastSpoken) {
       speakText(w.w);
       immLastSpoken = key;
@@ -1182,6 +1186,8 @@
   let quizIdx = 0;
   let quizScore = 0;
   let quizWrong = [];
+  let quizChosen = []; // 每题作答记录：{ idx, isRight } | null
+  let quizAutoTimer = null;
 
   function renderQuizSetup() {
     const sel = $("#quizScope");
@@ -1207,12 +1213,14 @@
     quizIdx = 0;
     quizScore = 0;
     quizWrong = [];
+    quizChosen = new Array(quizQ.length).fill(null);
     renderQuizQ();
   }
 
   function renderQuizQ() {
     const body = $("#quizBody");
     if (quizIdx >= quizQ.length) {
+      clearTimeout(quizAutoTimer);
       const pct = Math.round((quizScore / quizQ.length) * 100);
       store.set(LS.quiz, {
         scope: navState.scope,
@@ -1241,11 +1249,13 @@
         quizIdx = 0;
         quizScore = 0;
         quizWrong = [];
+        quizChosen = new Array(quizQ.length).fill(null);
         renderQuizQ();
       });
       return;
     }
     const q = quizQ[quizIdx];
+    const answered = quizChosen[quizIdx];
     body.innerHTML = `
       <div class="quiz-hud">
         <span>第 ${quizIdx + 1} / ${quizQ.length} 题</span>
@@ -1253,25 +1263,68 @@
       </div>
       <p class="quiz-q-sub">${q.type === "w2m" ? "请选出该单词的释义" : "请选出对应的单词"}</p>
       <div class="quiz-q">${esc(q.type === "w2m" ? q.w.w : q.w.m)}${q.type === "w2m" ? `<button class="speak-btn sm" data-speak="${esc(q.w.w)}">🔊</button>` : ""}</div>
-      <div class="quiz-opts">${q.opts.map((o, i) => `<button class="quiz-opt" data-i="${i}">${esc(o || "（空）")}</button>`).join("")}</div>`;
+      <div class="quiz-opts">${q.opts
+        .map((o, i) => {
+          let cls = "quiz-opt";
+          let mark = "";
+          if (answered) {
+            if (i === answered.idx) {
+              cls += answered.isRight ? " correct" : " wrong";
+              mark = answered.isRight ? " ✓" : " ✗";
+            } else if (o === q.answer) {
+              cls += " correct";
+              mark = " ✓";
+            }
+          }
+          return `<button class="${cls}" data-i="${i}" ${answered ? "disabled" : ""}>${esc(o || "（空）")}${mark}</button>`;
+        })
+        .join("")}</div>
+      ${answered ? `<div class="quiz-result ${answered.isRight ? "ok" : "bad"}">${answered.isRight ? "✓ 答对了" : "✗ 答错了，正确答案是：" + esc(q.answer)}</div>` : ""}
+      <div class="quiz-nav">
+        <button class="btn ghost" id="quizPrevBtn" ${quizIdx === 0 ? "disabled" : ""}>← 上一题</button>
+        <button class="btn primary" id="quizNextBtn" ${answered ? "" : "disabled"}>${quizIdx === quizQ.length - 1 ? "查看结果" : "下一题 →"}</button>
+      </div>`;
     $$(".quiz-opt", body).forEach((btn) =>
       btn.addEventListener("click", () => {
-        const chosen = q.opts[Number(btn.dataset.i)];
-        const isRight = chosen === q.answer;
-        $$(".quiz-opt", body).forEach((b) => {
-          b.disabled = true;
-          if (q.opts[Number(b.dataset.i)] === q.answer) b.classList.add("correct");
-          if (b === btn && !isRight) b.classList.add("wrong");
-        });
+        if (quizChosen[quizIdx]) return;
+        const i = Number(btn.dataset.i);
+        const isRight = q.opts[i] === q.answer;
+        quizChosen[quizIdx] = { idx: i, isRight };
         if (isRight) quizScore++;
         else {
           quizWrong.push(q.w);
           markWord(q.w, "l");
         }
-        quizIdx++;
-        setTimeout(renderQuizQ, 800);
+        renderQuizQ();
+        if (isRight) {
+          clearTimeout(quizAutoTimer);
+          quizAutoTimer = setTimeout(() => {
+            quizIdx++;
+            renderQuizQ();
+          }, 1000);
+        }
       })
     );
+    const prevBtn = $("#quizPrevBtn");
+    if (prevBtn) {
+      prevBtn.addEventListener("click", () => {
+        clearTimeout(quizAutoTimer);
+        if (quizIdx > 0) {
+          quizIdx--;
+          renderQuizQ();
+        }
+      });
+    }
+    const nextBtn = $("#quizNextBtn");
+    if (nextBtn) {
+      nextBtn.addEventListener("click", () => {
+        clearTimeout(quizAutoTimer);
+        if (quizChosen[quizIdx]) {
+          quizIdx++;
+          renderQuizQ();
+        }
+      });
+    }
   }
 
   /* ---------------- 收藏夹 ---------------- */
@@ -1532,6 +1585,8 @@
     // 沉浸
     $("#immPrevBtn").addEventListener("click", () => immStep(-1));
     $("#immNextBtn").addEventListener("click", () => immStep(1));
+    $("#immWordPrev").addEventListener("click", () => immStep(-1));
+    $("#immWordNext").addEventListener("click", () => immStep(1));
     $("#immListToggle").addEventListener("click", () => {
       const side = document.querySelector(".immerse-side");
       setImmSheet(!(side && side.classList.contains("open")));
