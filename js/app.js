@@ -407,7 +407,7 @@
       location.protocol === "https:" ||
       location.hostname === "localhost" ||
       location.hostname === "127.0.0.1";
-    if (ok) navigator.serviceWorker.register("./sw.js").catch(() => {});
+    if (ok) navigator.serviceWorker.register("./sw.js?v=3").catch(() => {});
   }
 
   /* ---------------- 学习状态 ---------------- */
