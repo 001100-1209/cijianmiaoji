@@ -57,6 +57,14 @@
 
         <div class="card quick-card">
           <h2 class="card-title">快捷入口</h2>
+          <div class="home-theme-row">
+            <span>主题</span>
+            <select id="homeTheme" class="select-input">
+              <option value="pink">粉色</option>
+              <option value="blue">浅蓝</option>
+              <option value="dark">夜间灰</option>
+            </select>
+          </div>
           <button class="btn primary wide" id="btnContinue">▶ 继续上次进度</button>
           <button class="btn soft wide" id="btnRandom">🎲 随机 20 词</button>
           <button class="btn soft wide" id="btnLatest">🌸 学习第 20 组（Lesson 39–40）</button>
@@ -102,8 +110,25 @@
       </div>
 
       <div class="card routine-card">
-        <h2 class="card-title">长期学习路径 <span class="en-sub">你的 50 天轮回计划</span></h2>
-        <p class="hint">数字为“组号”（1–20），每组 = 半个单元 = 2 个 lesson：第 1 组=Lesson 1–2、第 2 组=Lesson 3–4 …… 第 20 组=Lesson 39–40。上午新背+复习，晚上复习；1–20 天背完 20 组，21–50 天按艾宾浩斯间隔纯复习。</p>
+        <h2 class="card-title">长期学习路径 <span class="en-sub" id="routineSub">你的学习计划</span></h2>
+        <div class="plan-toolbar">
+          <select id="planType" class="select-input">
+            <option value="ten">十天计划（每组 4 课时）</option>
+            <option value="twenty">二十天计划（每组 2 课时）</option>
+            <option value="custom">自定义计划</option>
+          </select>
+          <span id="planGroupSizeWrap" style="display:none">
+            <label>每组课时：</label>
+            <select id="customGroupSize" class="select-input">
+              <option value="1">1 个 lesson</option>
+              <option value="2">2 个 lesson</option>
+              <option value="3">3 个 lesson</option>
+              <option value="4">4 个 lesson</option>
+            </select>
+          </span>
+          <button class="btn soft sm" id="customSaveBtn" style="display:none">保存自定义计划</button>
+        </div>
+        <p class="hint" id="routineHint"></p>
         <div class="table-scroll">
           <div class="routine-blocks" id="routineTable"></div>
         </div>
@@ -173,7 +198,7 @@
                 <span class="note-save" id="noteSave">未编辑</span>
               </div>
               <textarea id="noteInput" class="note-input" rows="3"
-                placeholder="写下你的谐音、联想、小故事…（内容仅保存在本机浏览器，可随时修改）"></textarea>
+                placeholder="写下你的谐音、联想、小故事…（登录后保存在你的账号中，可随时修改）"></textarea>
               <p class="note-tip" id="noteTip"></p>
             </div>
             <div class="word-actions">
@@ -402,12 +427,12 @@
       <div class="card about-card">
         <h2 class="card-title">关于</h2>
         <ul>
-          <li>词汇数据：来自桌面文档《英语.xlsx》的「考研单词-5920」工作表，Lesson 1–40 共 2934 个单词，含词群标签。</li>
-          <li>妙计预置：Lesson 1–4 共 118 个单词已填入书中的「联想记忆法」（来自 lesson1~4.txt），可自由修改。</li>
-          <li>轮回计划：数字 1–20 为组号，每组 = 半个单元 = 2 个 lesson；1–20 天新背，21–50 天按艾宾浩斯间隔复习。</li>
-          <li>“妙计”模块：内容由你自己填写（谐音、联想、小故事等），自动保存在本机。</li>
-          <li>学习状态（认识/模糊/不认识）、收藏、测试成绩同样只保存在本机。</li>
-          <li>数据存在浏览器里（localStorage），跟文件夹位置绑定：如果移动整个文件夹，请先“导出备份”，移到新位置后再“导入”。</li>
+          <li>词汇数据：根据刘晓艳老师《考研英语你还在背单词吗》及其 B 站视频（BV1Y8AwzHEhc）整理，Lesson 1–40 共 2934 个单词，含词群标签。</li>
+          <li>妙计预置：目前共 1230 个单词已预置书中的「联想记忆法」（来源：lesson1~4.txt 及“英语”文件夹的 4 份 docx 整理），可自由修改。</li>
+          <li>轮回计划：内置十天计划（每组 4 课时）与二十天计划（每组 2 课时），也可自定义每组课时并自己填写计划表。</li>
+          <li>“妙计”模块：内容由你自己填写（谐音、联想、小故事等），登录后保存在你的账号中。</li>
+          <li>学习状态（认识/模糊/不认识）、收藏、测试成绩：登录后同样保存在你的账号中，随云端同步到各设备。</li>
+          <li>数据默认先保存在本机；登录并配置云端同步后自动备份到云端（Supabase），换设备登录同一账号即可取回。</li>
           <li>建议配合刘晓艳老师视频与《考研英语你还在背单词吗》使用。</li>
         </ul>
       </div>
@@ -415,6 +440,15 @@
   </main>
 
   <footer class="site-foot">词间妙记 · 愿你与单词，慢慢熟稔</footer>
+
+  <div class="modal-mask" id="welcomeModal" style="display:none">
+    <div class="modal-box">
+      <h3>欢迎使用「词间妙记」</h3>
+      <p>本网站根据刘晓艳老师的《考研英语你还在背单词吗》及其 B 站配套视频制作，用于背单词与复习。</p>
+      <p>视频链接：<a href="https://www.bilibili.com/video/BV1Y8AwzHEhc" target="_blank" rel="noopener">BV1Y8AwzHEhc（B 站）</a></p>
+      <button class="btn primary" id="welcomeClose">知道了</button>
+    </div>
+  </div>
 
   <script src="js/words.js?v=3"></script>
   <script src="js/book-notes.js?v=3"></script>

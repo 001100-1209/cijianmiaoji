@@ -13,6 +13,7 @@
     cards: "wbm_cards_v1",
     sync: "wbm_sync_v1",
     syncMeta: "wbm_sync_meta_v1",
+    customPlan: "wbm_custom_plan_v1",
     settings: "wbm_settings_v1",
   };
 
@@ -310,6 +311,8 @@
     }
     await refreshAuth();
     renderSettings();
+    go("home");
+    showWelcomeModal();
     syncNow().catch(() => {});
   }
   async function authSignup() {
@@ -338,6 +341,8 @@
       await refreshAuth();
       setSyncStatus("注册成功");
       renderSettings();
+      go("home");
+      showWelcomeModal();
       syncNow().catch(() => {});
     } else {
       setSyncStatus("注册成功，请到邮箱点确认链接后再登录（或在 Supabase 中关闭邮件确认）");
@@ -376,6 +381,11 @@
       const s = $("#authSignupBtn");
       if (s) s.addEventListener("click", () => authSignup());
     }
+  }
+
+  function showWelcomeModal() {
+    const m = $("#welcomeModal");
+    if (m) m.style.display = "flex";
   }
 
   /* ---------------- 旧数据格式迁移 ---------------- */
@@ -576,7 +586,23 @@
   });
 
   /* ---------------- 首页 ---------------- */
+  function fmtCell(arr) {
+    return arr && arr.length ? arr.join("、") : "";
+  }
+  function parseCell(text) {
+    return String(text || "")
+      .split(/[、，,;\s]+/)
+      .map((s) => s.trim())
+      .filter((s) => /^\d+$/.test(s))
+      .map(Number);
+  }
+  function getCustomPlan() {
+    return store.get(LS.customPlan, { groupSize: 2, rows: [] });
+  }
+
   function renderHome() {
+    const ht = $("#homeTheme");
+    if (ht) ht.value = getSetting("theme") || "pink";
     const stats = getStats();
     const pct = stats.total ? Math.round((stats.mastered / stats.total) * 100) : 0;
     const ring = $("#ringFg");
@@ -636,8 +662,29 @@
   }
 
   function renderRoutine() {
-    // 50 天计划：数字 = 组号（1–20，每组=半个单元=2 个 lesson）
-    const plan = [
+    const PLAN_TEN = [
+      { d: 1, am: [1], pm: [1] },
+      { d: 2, am: [2], pm: [1, 2] },
+      { d: 3, am: [3], pm: [2, 3] },
+      { d: 4, am: [4], pm: [1, 3, 4] },
+      { d: 5, am: [5], pm: [2, 4, 5] },
+      { d: 6, am: [6], pm: [3, 5, 6] },
+      { d: 7, am: [7], pm: [4, 6, 7] },
+      { d: 8, am: [1, 8], pm: [5, 7, 8] },
+      { d: 9, am: [2, 9], pm: [6, 8, 9] },
+      { d: 10, am: [3, 10], pm: [7, 9, 10] },
+      { d: 11, am: [4], pm: [8, 10] },
+      { d: 12, am: [5], pm: [9] },
+      { d: 13, am: [6], pm: [10] },
+      { d: 14, am: [7], pm: [] },
+      { d: 15, am: [1, 8], pm: [] },
+      { d: 16, am: [2, 9], pm: [] },
+      { d: 17, am: [3, 10], pm: [] },
+      { d: 18, am: [4], pm: [] },
+      { d: 19, am: [5], pm: [] },
+      { d: 20, am: [6], pm: [] },
+    ];
+    const PLAN_TWENTY = [
       { d: 1, am: [1], pm: [1] },
       { d: 2, am: [2], pm: [1, 2] },
       { d: 3, am: [3], pm: [2, 3] },
@@ -690,19 +737,63 @@
       { d: 50, am: [], pm: [] },
     ];
     const fmt = (arr) => (arr && arr.length ? arr.join("、") : "—");
-    let html = "";
-    for (let b = 0; b < 5; b++) {
-      const days = plan.slice(b * 10, b * 10 + 10);
-      const dayNums = days.map((x) => x.d).join("</th><th>");
-      const am = days.map((x) => `<td>${fmt(x.am)}</td>`).join("");
-      const pm = days.map((x) => `<td>${fmt(x.pm)}</td>`).join("");
-      html += `<table class="routine-table plan-block">
-        <tr><th>第 ${b * 10 + 1}–${b * 10 + 10} 天</th><th>${dayNums}</th></tr>
-        <tr><td>上午</td>${am}</tr>
-        <tr><td>晚上</td>${pm}</tr>
-      </table>`;
+
+    function renderPlanBlocks(days) {
+      const blocks = Math.ceil(days.length / 10);
+      let html = "";
+      for (let b = 0; b < blocks; b++) {
+        const slice = days.slice(b * 10, b * 10 + 10);
+        const dayNums = slice.map((x) => x.d).join("</th><th>");
+        const am = slice.map((x) => `<td>${fmt(x.am)}</td>`).join("");
+        const pm = slice.map((x) => `<td>${fmt(x.pm)}</td>`).join("");
+        html += `<table class="routine-table plan-block">
+          <tr><th>第 ${b * 10 + 1}–${Math.min(b * 10 + 10, days.length)} 天</th><th>${dayNums}</th></tr>
+          <tr><td>上午</td>${am}</tr>
+          <tr><td>晚上</td>${pm}</tr>
+        </table>`;
+      }
+      $("#routineTable").innerHTML = html;
     }
-    $("#routineTable").innerHTML = html;
+
+    function renderCustomPlan() {
+      const c = getCustomPlan();
+      const rows = c.rows && c.rows.length ? c.rows : Array.from({ length: 30 }, () => ({ am: [], pm: [] }));
+      let html = `<table class="routine-table plan-block"><tr><th>天数</th><th>上午（组号）</th><th>晚上（组号）</th></tr>`;
+      rows.forEach((r, i) => {
+        html += `<tr><td>第 ${i + 1} 天</td><td><input class="custom-cell" data-r="${i}" data-t="am" value="${esc(fmtCell(r.am))}"></td><td><input class="custom-cell" data-r="${i}" data-t="pm" value="${esc(fmtCell(r.pm))}"></td></tr>`;
+      });
+      html += `</table>`;
+      $("#routineTable").innerHTML = html;
+    }
+
+    const type = getSetting("planType") || "twenty";
+    $("#planType").value = type;
+    const wrap = $("#planGroupSizeWrap");
+    const saveBtn = $("#customSaveBtn");
+    const hint = $("#routineHint");
+    const sub = $("#routineSub");
+    if (type === "ten") {
+      wrap.style.display = "none";
+      saveBtn.style.display = "none";
+      sub.textContent = "十天计划";
+      hint.textContent = "数字为组号（1–10），每组 = 4 个 lesson：第 1 组=Lesson 1–4 …… 第 10 组=Lesson 37–40。D1–D10 新背+复习，D11–D20 按艾宾浩斯间隔复习。";
+      renderPlanBlocks(PLAN_TEN);
+    } else if (type === "custom") {
+      wrap.style.display = "";
+      saveBtn.style.display = "";
+      const c = getCustomPlan();
+      $("#customGroupSize").value = String(c.groupSize || 2);
+      const groups = Math.ceil(40 / (c.groupSize || 2));
+      sub.textContent = "自定义计划";
+      hint.textContent = `每组 ${c.groupSize || 2} 个 lesson，共 ${groups} 组。直接在表格里填写（数字为组号，多个用顿号分隔），点「保存自定义计划」生效。`;
+      renderCustomPlan();
+    } else {
+      wrap.style.display = "none";
+      saveBtn.style.display = "none";
+      sub.textContent = "二十天计划";
+      hint.textContent = "数字为组号（1–20），每组 = 2 个 lesson：第 1 组=Lesson 1–2 …… 第 20 组=Lesson 39–40。1–20 天新背+复习，21–50 天按艾宾浩斯间隔复习。";
+      renderPlanBlocks(PLAN_TWENTY);
+    }
   }
 
   /* ---------------- 词集库 ---------------- */
@@ -961,7 +1052,7 @@
     noteInput.value = getNote(key);
     $("#noteSave").textContent = notes[key] ? "已保存" : "未填写";
     $("#noteTip").textContent = notes[key]
-      ? "妙计已保存在本机，可继续修改"
+      ? "妙计已保存到你的账号，可继续修改"
       : "例如：ambition 读起来像「俺必胜」→ 我有必胜的决心 → 野心、抱负";
     const favBtn = $("#btnFav");
     favBtn.textContent = getFav()[key] ? "♥ 已收藏" : "♡ 收藏";
@@ -1554,6 +1645,10 @@
   /* ---------------- 事件绑定 ---------------- */
   function bindEvents() {
     // 首页
+    $("#homeTheme").addEventListener("change", () => {
+      setSetting("theme", $("#homeTheme").value);
+      applyTheme();
+    });
     $("#btnContinue").addEventListener("click", () => {
       const last = store.get(LS.last, null);
       if (last && last.scope) {
@@ -1581,6 +1676,39 @@
       $("#cardDueFirst").checked = false;
       $("#cardStart").click();
     });
+
+    // 计划
+    $("#planType").addEventListener("change", () => {
+      setSetting("planType", $("#planType").value);
+      renderRoutine();
+    });
+    $("#customGroupSize").addEventListener("change", () => {
+      const c = getCustomPlan();
+      c.groupSize = Number($("#customGroupSize").value) || 2;
+      store.set(LS.customPlan, c);
+      renderRoutine();
+    });
+    $("#customSaveBtn").addEventListener("click", () => {
+      const groupSize = Number($("#customGroupSize").value) || 2;
+      const rows = [];
+      $$(".custom-cell").forEach((inp) => {
+        const r = Number(inp.dataset.r);
+        const t = inp.dataset.t;
+        if (!rows[r]) rows[r] = { am: [], pm: [] };
+        rows[r][t] = parseCell(inp.value);
+      });
+      store.set(LS.customPlan, { groupSize, rows });
+      renderRoutine();
+    });
+    const welcomeClose = $("#welcomeClose");
+    if (welcomeClose) {
+      welcomeClose.addEventListener("click", () => {
+        $("#welcomeModal").style.display = "none";
+      });
+      $("#welcomeModal").addEventListener("click", (e) => {
+        if (e.target === $("#welcomeModal")) $("#welcomeModal").style.display = "none";
+      });
+    }
 
     // 沉浸
     $("#immPrevBtn").addEventListener("click", () => immStep(-1));

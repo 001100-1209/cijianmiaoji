@@ -215,6 +215,8 @@ main { max-width: 1120px; margin: 0 auto; padding: 26px 20px 80px; }
 .home-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px; margin-bottom: 18px; }
 .home-grid.two { grid-template-columns: 1fr 1fr; }
 @media (max-width: 860px) { .home-grid, .home-grid.two { grid-template-columns: 1fr; } }
+.home-theme-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--ink-soft); font-size: 13px; }
+.home-theme-row .select-input { flex: 1; }
 
 .dash-card { display: flex; flex-direction: column; }
 .ring-wrap { display: flex; align-items: center; gap: 22px; margin-bottom: 8px; }
@@ -274,6 +276,20 @@ main { max-width: 1120px; margin: 0 auto; padding: 26px 20px 80px; }
 .timer-min-label { font-size: 13px; color: var(--ink-soft); margin: 0 4px; }
 
 .routine-card { margin-top: 18px; }
+.plan-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.plan-toolbar label { font-size: 13px; color: var(--ink-soft); }
+.custom-cell {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 8px;
+  width: 100%;
+  min-width: 120px;
+  font-size: 12px;
+  color: var(--ink);
+  outline: none;
+}
+.custom-cell:focus { border-color: var(--pink-400); }
 .table-scroll { overflow-x: auto; }
 .routine-blocks { display: grid; gap: 14px; }
 .routine-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 640px; }
@@ -649,6 +665,32 @@ body.no-tts .speak-btn, body.no-tts [data-speak] { display: none !important; }
 
 .site-foot { text-align: center; color: var(--ink-faint); font-size: 12px; padding: 18px 0 30px; letter-spacing: 2px; }
 
+/* ---------- 欢迎弹窗 ---------- */
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(30, 20, 25, 0.45);
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-box {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  max-width: 420px;
+  width: 100%;
+  padding: 24px;
+  text-align: center;
+}
+.modal-box h3 { color: var(--pink-600); font-family: var(--serif); margin-bottom: 12px; }
+.modal-box p { color: var(--ink-soft); font-size: 14px; line-height: 1.8; margin-bottom: 10px; }
+.modal-box a { color: var(--pink-600); }
+.modal-box .btn { margin-top: 12px; }
+
 /* ---------- 手机端适配 ---------- */
 @media (max-width: 640px) {
   .topbar { padding: 8px 10px; flex-wrap: wrap; }
@@ -758,6 +800,7 @@ body[data-theme="dark"] .routine-table th { background: var(--pink-100); color: 
 body[data-theme="dark"] .routine-table td { border-color: var(--line); }
 body[data-theme="dark"] .routine-table td:first-child { background: var(--pink-50); }
 body[data-theme="dark"] .routine-table tr:nth-child(even) td { background: #1f252d; }
+body[data-theme="dark"] .custom-cell { background: #2a323c; color: var(--ink); border-color: var(--line); }
 body[data-theme="dark"] .btn.ghost { color: var(--ink-soft); border-color: var(--line); }
 body[data-theme="dark"] .btn.good { background: #1f3a2b; color: #7fd6a4; border-color: #2c4d3a; }
 body[data-theme="dark"] .btn.fuzzy { background: #3a3120; color: #e0b45f; border-color: #55472a; }
