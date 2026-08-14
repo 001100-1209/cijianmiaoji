@@ -332,6 +332,7 @@
       store.set(LS.syncMeta, { lastSyncAt: Date.now(), dirty: false });
       setSyncStatus("已同步 " + new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }));
       renderSettings();
+      if (getSetting("shareNotes") === true) scheduleShareSync();
     } catch (e) {
       const msg = e && e.message ? e.message : "未知错误";
       setSyncStatus(msg === "请先登录" ? "未登录，登录后自动同步" : "同步失败：" + msg);
