@@ -458,6 +458,29 @@
     const m = $("#updateModal");
     if (m) m.style.display = "flex";
   }
+  function showSiteModal() {
+    const m = $("#siteModal");
+    if (!m) return;
+    const cur = $("#siteCurrentHint");
+    if (cur) {
+      const host = location.hostname || "";
+      cur.textContent = host.includes("dpdns.org") ? "你当前正在访问备用站。" : "你当前正在访问主站。";
+    }
+    m.style.display = "flex";
+  }
+  function anyModalOpen() {
+    return ["welcomeModal", "updateModal", "poolModal", "maskNoteModal", "siteModal"].some((id) => {
+      const el = document.getElementById(id);
+      return el && el.style.display === "flex";
+    });
+  }
+  function maybeShowSiteNotice() {
+    try {
+      if (sessionStorage.getItem("wbm_site_notice_seen")) return;
+    } catch (e) {}
+    if (anyModalOpen()) return;
+    showSiteModal();
+  }
   async function submitFeedback() {
     const content = ($("#feedbackInput").value || "").trim();
     const st = $("#feedbackStatus");
@@ -1011,6 +1034,24 @@
       { d: 49, am: [20], pm: [] },
       { d: 50, am: [], pm: [] },
     ];
+    // 四十天计划：与二十天计划同规律（新背当天+第1/3/7/14/29天间隔复习），40 组共 70 天
+    const PLAN_FORTY = (() => {
+      const days = Array.from({ length: 70 }, (_, i) => ({ d: i + 1, am: [], pm: [] }));
+      const put = (day, slot, g) => {
+        const row = days[day - 1];
+        if (row) row[slot].push(g);
+      };
+      for (let g = 1; g <= 40; g++) {
+        put(g, "am", g);
+        put(g, "pm", g);
+        put(g + 1, "pm", g);
+        put(g + 3, "pm", g);
+        put(g + 7, "am", g);
+        put(g + 14, "am", g);
+        put(g + 29, "am", g);
+      }
+      return days;
+    })();
     const fmt = (arr) => (arr && arr.length ? arr.join("、") : "—");
 
     function renderPlanBlocks(days) {
@@ -1032,7 +1073,9 @@
 
     function renderCustomPlan() {
       const c = getCustomPlan();
-      const rows = c.rows && c.rows.length ? c.rows : Array.from({ length: 30 }, () => ({ am: [], pm: [] }));
+      const groups = Math.max(1, Math.ceil(40 / (c.groupSize || 2)));
+      const saved = c.rows || [];
+      const rows = Array.from({ length: Math.max(groups, saved.length) }, (_, i) => saved[i] || { am: [], pm: [] });
       let html = `<table class="routine-table plan-block"><tr><th>天数</th><th>上午（组号）</th><th>晚上（组号）</th></tr>`;
       rows.forEach((r, i) => {
         html += `<tr><td>第 ${i + 1} 天</td><td><input class="custom-cell" data-r="${i}" data-t="am" value="${esc(fmtCell(r.am))}"></td><td><input class="custom-cell" data-r="${i}" data-t="pm" value="${esc(fmtCell(r.pm))}"></td></tr>`;
@@ -1062,6 +1105,12 @@
       sub.textContent = "自定义计划";
       hint.textContent = `每组 ${c.groupSize || 2} 个 lesson，共 ${groups} 组。直接在表格里填写（数字为组号，多个用顿号分隔），点「保存自定义计划」生效。`;
       renderCustomPlan();
+    } else if (type === "forty") {
+      wrap.style.display = "none";
+      saveBtn.style.display = "none";
+      sub.textContent = "四十天计划";
+      hint.textContent = "数字为组号（1–40），每组 = 1 个 lesson：第 1 组=Lesson 1，第 2 组=Lesson 2，……，第 40 组=Lesson 40。1–40 天新背+复习，41–70 天按艾宾浩斯间隔复习。";
+      renderPlanBlocks(PLAN_FORTY);
     } else {
       wrap.style.display = "none";
       saveBtn.style.display = "none";
@@ -2175,9 +2224,26 @@
     if (welcomeClose) {
       welcomeClose.addEventListener("click", () => {
         $("#welcomeModal").style.display = "none";
+        maybeShowSiteNotice();
       });
       $("#welcomeModal").addEventListener("click", (e) => {
-        if (e.target === $("#welcomeModal")) $("#welcomeModal").style.display = "none";
+        if (e.target === $("#welcomeModal")) {
+          $("#welcomeModal").style.display = "none";
+          maybeShowSiteNotice();
+        }
+      });
+    }
+    const siteClose = $("#siteModalClose");
+    if (siteClose) {
+      const closeSiteModal = () => {
+        $("#siteModal").style.display = "none";
+        try {
+          sessionStorage.setItem("wbm_site_notice_seen", "1");
+        } catch (e) {}
+      };
+      siteClose.addEventListener("click", closeSiteModal);
+      $("#siteModal").addEventListener("click", (e) => {
+        if (e.target === $("#siteModal")) closeSiteModal();
       });
     }
 
@@ -2204,6 +2270,7 @@
       setSetting("shareNotes", true);
       $("#updateModal").style.display = "none";
       renderHome();
+      maybeShowSiteNotice();
       scheduleShareSync();
     });
     $("#updateShareNo").addEventListener("click", () => {
@@ -2211,6 +2278,7 @@
       setSetting("shareNotes", false);
       $("#updateModal").style.display = "none";
       renderHome();
+      maybeShowSiteNotice();
     });
 
     // 遮罩记忆
@@ -2500,6 +2568,7 @@
     const hash = location.hash.replace("#", "");
     go(hash && document.getElementById("view-" + hash) ? hash : "home");
     setTimeout(showUpdateModal, 1200);
+    setTimeout(maybeShowSiteNotice, 1800);
     // 配置了同步服务时：恢复登录态，已登录则自动同步一次
     const cfg = syncConfig();
     if (cfg && cfg.url && cfg.key) {

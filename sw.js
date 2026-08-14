@@ -1,14 +1,14 @@
 /* 词间妙记 · Service Worker（离线缓存） */
-const CACHE = "wbm-cache-v3";
+const CACHE = "wbm-cache-v5";
 const ASSETS = [
   "./",
   "./index.html",
-  "./css/style.css?v=3",
-  "./js/words.js?v=3",
-  "./js/book-notes.js?v=3",
-  "./js/supabase-config.js?v=3",
-  "./js/app.js?v=3",
-  "./manifest.webmanifest?v=3",
+  "./css/style.css?v=5",
+  "./js/words.js?v=5",
+  "./js/book-notes.js?v=5",
+  "./js/supabase-config.js?v=5",
+  "./js/app.js?v=5",
+  "./manifest.webmanifest?v=5",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
 ];

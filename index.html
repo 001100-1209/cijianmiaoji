@@ -4,13 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>词间妙记 · Words in Bloom</title>
-  <link rel="manifest" href="manifest.webmanifest?v=3" />
+  <link rel="manifest" href="manifest.webmanifest?v=5" />
   <meta name="theme-color" content="#e88fae" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="词间妙记" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="css/style.css?v=3" />
+  <link rel="stylesheet" href="css/style.css?v=5" />
 </head>
 <body>
   <header class="topbar">
@@ -121,6 +121,7 @@
           <select id="planType" class="select-input">
             <option value="ten">十天计划（每组 4 课时）</option>
             <option value="twenty">二十天计划（每组 2 课时）</option>
+            <option value="forty">四十天计划（每组 1 课时）</option>
             <option value="custom">自定义计划</option>
           </select>
           <span id="planGroupSizeWrap" style="display:none">
@@ -478,7 +479,7 @@
         <ul>
           <li>词汇数据：根据刘晓艳老师《考研英语你还在背单词吗》及其 B 站视频（BV1Y8AwzHEhc）整理，Lesson 1–40 共 2934 个单词，含词群标签。</li>
           <li>妙计预置：目前共 1230 个单词已预置书中的「联想记忆法」（来源：lesson1~4.txt 及“英语”文件夹的 4 份 docx 整理），可自由修改。</li>
-          <li>轮回计划：内置十天计划（每组 4 课时）与二十天计划（每组 2 课时），也可自定义每组课时并自己填写计划表。</li>
+          <li>轮回计划：内置十天计划（每组 4 课时）、二十天计划（每组 2 课时）与四十天计划（每组 1 课时），也可自定义每组课时并自己填写计划表。</li>
           <li>“妙计”模块：内容由你自己填写（谐音、联想、小故事等），登录后保存在你的账号中。</li>
           <li>学习状态（认识/模糊/不认识）、收藏、测试成绩：登录后同样保存在你的账号中，随云端同步到各设备。</li>
           <li>数据默认先保存在本机；登录并配置云端同步后自动备份到云端（Supabase），换设备登录同一账号即可取回。</li>
@@ -488,7 +489,7 @@
     </section>
   </main>
 
-  <footer class="site-foot">词间妙记 · 愿你与单词，慢慢熟稔</footer>
+  <footer class="site-foot">词间妙记 · 愿你与单词，慢慢熟稔 · <a href="https://cijianmiaoji.netlify.app" target="_blank" rel="noopener">主站</a> / <a href="https://001100.dpdns.org" target="_blank" rel="noopener">备用站</a></footer>
 
   <div class="modal-mask" id="welcomeModal" style="display:none">
     <div class="modal-box">
@@ -511,6 +512,16 @@
     </div>
   </div>
 
+  <div class="modal-mask" id="siteModal" style="display:none">
+    <div class="modal-box">
+      <h3>网站入口</h3>
+      <p>主网站：<a href="https://cijianmiaoji.netlify.app" target="_blank" rel="noopener">cijianmiaoji.netlify.app</a></p>
+      <p>备用网站：<a href="https://001100.dpdns.org" target="_blank" rel="noopener">001100.dpdns.org</a></p>
+      <p class="hint" id="siteCurrentHint"></p>
+      <button class="btn primary" id="siteModalClose">知道了</button>
+    </div>
+  </div>
+
   <div class="modal-mask" id="poolModal" style="display:none">
     <div class="modal-box pool-box">
       <h3 id="poolTitle">妙计池</h3>
@@ -529,9 +540,9 @@
     </div>
   </div>
 
-  <script src="js/words.js?v=3"></script>
-  <script src="js/book-notes.js?v=3"></script>
-  <script src="js/supabase-config.js?v=3"></script>
-  <script src="js/app.js?v=3"></script>
+  <script src="js/words.js?v=5"></script>
+  <script src="js/book-notes.js?v=5"></script>
+  <script src="js/supabase-config.js?v=5"></script>
+  <script src="js/app.js?v=5"></script>
 </body>
 </html>
