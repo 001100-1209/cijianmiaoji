@@ -2492,6 +2492,7 @@
           await refreshAuth();
           renderSettings();
           if (authSession) await syncNow();
+          if (getSetting("shareNotes") === true) scheduleShareSync();
         } catch (e) {
           /* 网络不可用时保持本地使用 */
         }
