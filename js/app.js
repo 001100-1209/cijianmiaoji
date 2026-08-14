@@ -180,7 +180,7 @@
     if (!cfg || !cfg.url || !cfg.key) return null;
     let mod = null;
     try {
-      mod = await import("./js/supabase-js.mjs");
+      mod = await import(new URL("js/supabase-js.mjs", document.baseURI).href);
     } catch (e) {
       // 本地模块不可用时回退 CDN
       mod = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
@@ -350,37 +350,41 @@
   }
   async function syncShares() {
     if (!authSession || !authSession.user) return;
-    const sb = await getSupabase();
-    if (!sb) return;
-    const shareOn = getSetting("shareNotes") === true;
-    const uid = authSession.user.id;
-    if (!shareOn) {
-      await sb.from("note_shares").delete().eq("user_id", uid);
+    try {
+      const sb = await getSupabase();
+      if (!sb) return;
+      const shareOn = getSetting("shareNotes") === true;
+      const uid = authSession.user.id;
+      if (!shareOn) {
+        await sb.from("note_shares").delete().eq("user_id", uid);
+        const st = $("#shareStatus");
+        if (st) st.textContent = "未开启";
+        return;
+      }
+      const notes = getNotes();
+      const rows = [];
+      const seen = new Set();
+      for (const [key, entry] of Object.entries(notes)) {
+        if (!entry || !Array.isArray(entry.items) || !key.includes(":")) continue;
+        entry.items.forEach((it) => {
+          if (!it.t) return;
+          const noteId = "h" + simpleHash(it.t);
+          const rk = key + "::" + noteId;
+          if (seen.has(rk)) return;
+          seen.add(rk);
+          rows.push({ note_id: noteId, word_key: key, text: it.t, user_id: uid });
+        });
+      }
+      const { data: existing } = await sb.from("note_shares").select("note_id").eq("user_id", uid);
+      const keep = new Set(rows.map((r) => r.note_id));
+      const del = (existing || []).filter((r) => !keep.has(r.note_id)).map((r) => r.note_id);
+      if (del.length) await sb.from("note_shares").delete().eq("user_id", uid).in("note_id", del);
+      if (rows.length) await sb.from("note_shares").upsert(rows, { onConflict: "user_id,note_id" });
       const st = $("#shareStatus");
-      if (st) st.textContent = "未开启";
-      return;
+      if (st) st.textContent = `已共享 ${rows.length} 条`;
+    } catch (e) {
+      console.warn("共享同步失败", e && e.message ? e.message : e);
     }
-    const notes = getNotes();
-    const rows = [];
-    const seen = new Set();
-    for (const [key, entry] of Object.entries(notes)) {
-      if (!entry || !Array.isArray(entry.items) || !key.includes(":")) continue;
-      entry.items.forEach((it) => {
-        if (!it.t) return;
-        const noteId = "h" + simpleHash(it.t);
-        const rk = key + "::" + noteId;
-        if (seen.has(rk)) return;
-        seen.add(rk);
-        rows.push({ note_id: noteId, word_key: key, text: it.t, user_id: uid });
-      });
-    }
-    const { data: existing } = await sb.from("note_shares").select("note_id").eq("user_id", uid);
-    const keep = new Set(rows.map((r) => r.note_id));
-    const del = (existing || []).filter((r) => !keep.has(r.note_id)).map((r) => r.note_id);
-    if (del.length) await sb.from("note_shares").delete().eq("user_id", uid).in("note_id", del);
-    if (rows.length) await sb.from("note_shares").upsert(rows, { onConflict: "user_id,note_id" });
-    const st = $("#shareStatus");
-    if (st) st.textContent = `已共享 ${rows.length} 条`;
   }
   async function openPool(wordKey) {
     const box = $("#poolModal");
