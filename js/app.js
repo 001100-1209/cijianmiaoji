@@ -246,7 +246,8 @@
     if (v && Array.isArray(v.items)) return v;
     const t = typeof v === "string" ? v : (v && v.t) || "";
     const at = v && v.at ? v.at : 0;
-    return t ? { items: [{ id: "old" + (v && v.at ? v.at : Date.now()), t, at }], cur: 0 } : { items: [], cur: 0 };
+    // 旧格式条目用文本哈希做稳定 id，避免每次同步生成新 id 导致重复
+    return t ? { items: [{ id: "o" + simpleHash(t), t, at }], cur: 0 } : { items: [], cur: 0 };
   }
   function mergeNotes(local, remote) {
     const out = {};
