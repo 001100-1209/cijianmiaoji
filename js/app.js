@@ -221,6 +221,34 @@
   function atOfEntry(v) {
     return v && typeof v === "object" && v.at ? v.at : 0;
   }
+  function normalizeNoteEntry(v) {
+    if (v && Array.isArray(v.items)) return v;
+    const t = typeof v === "string" ? v : (v && v.t) || "";
+    const at = v && v.at ? v.at : 0;
+    return t ? { items: [{ id: "old" + (v && v.at ? v.at : Date.now()), t, at }], cur: 0 } : { items: [], cur: 0 };
+  }
+  function mergeNotes(local, remote) {
+    const out = {};
+    const keys = new Set([...Object.keys(local || {}), ...Object.keys(remote || {})]);
+    for (const k of keys) {
+      const l = normalizeNoteEntry(local && local[k]);
+      const r = normalizeNoteEntry(remote && remote[k]);
+      const byId = new Map();
+      for (const it of l.items) byId.set(it.id, it);
+      for (const it of r.items) {
+        const ex = byId.get(it.id);
+        if (!ex || (it.at || 0) > (ex.at || 0)) byId.set(it.id, it);
+      }
+      const items = Array.from(byId.values()).filter((x) => x.t);
+      if (!items.length) continue;
+      const curId = (l.items[l.cur] || {}).id;
+      let cur = items.findIndex((x) => x.id === curId);
+      if (cur < 0) cur = items.findIndex((x) => x.id === (r.items[r.cur] || {}).id);
+      if (cur < 0) cur = 0;
+      out[k] = { items, cur };
+    }
+    return out;
+  }
   function mergeMap(localMap, remoteMap) {
     const out = { ...(remoteMap || {}) };
     for (const k of Object.keys(localMap || {})) {
@@ -236,7 +264,7 @@
     const quiz = remote && remote.quiz && !local.quiz ? remote.quiz : local.quiz;
     return {
       progress: mergeMap(local.progress, remote && remote.progress),
-      notes: mergeMap(local.notes, remote && remote.notes),
+      notes: mergeNotes(local.notes, remote && remote.notes),
       fav: mergeMap(local.fav, remote && remote.fav),
       quiz,
     };
@@ -290,6 +318,120 @@
     }
   }
 
+  /* ---------------- 妙计共享池 ---------------- */
+  let shareSyncTimer = null;
+  function scheduleShareSync() {
+    clearTimeout(shareSyncTimer);
+    shareSyncTimer = setTimeout(() => {
+      syncShares().catch(() => {});
+    }, 2000);
+  }
+  async function syncShares() {
+    if (!authSession || !authSession.user) return;
+    const sb = await getSupabase();
+    if (!sb) return;
+    const shareOn = getSetting("shareNotes") === true;
+    const uid = authSession.user.id;
+    if (!shareOn) {
+      await sb.from("note_shares").delete().eq("user_id", uid);
+      const st = $("#shareStatus");
+      if (st) st.textContent = "未开启";
+      return;
+    }
+    const notes = getNotes();
+    const rows = [];
+    for (const [key, entry] of Object.entries(notes)) {
+      if (!entry || !Array.isArray(entry.items) || !key.includes(":")) continue;
+      entry.items.forEach((it) => {
+        if (it.t) rows.push({ note_id: it.id, word_key: key, text: it.t, user_id: uid });
+      });
+    }
+    const { data: existing } = await sb.from("note_shares").select("note_id").eq("user_id", uid);
+    const keep = new Set(rows.map((r) => r.note_id));
+    const del = (existing || []).filter((r) => !keep.has(r.note_id)).map((r) => r.note_id);
+    if (del.length) await sb.from("note_shares").delete().eq("user_id", uid).in("note_id", del);
+    if (rows.length) await sb.from("note_shares").upsert(rows, { onConflict: "user_id,note_id" });
+    const st = $("#shareStatus");
+    if (st) st.textContent = `已共享 ${rows.length} 条`;
+  }
+  async function openPool(wordKey) {
+    const box = $("#poolModal");
+    if (!box) return;
+    $("#poolList").innerHTML = "";
+    if (!authSession || !authSession.user) {
+      $("#poolTitle").textContent = "妙计池";
+      $("#poolHint").textContent = "请先登录后再查看妙计池。";
+      box.style.display = "flex";
+      return;
+    }
+    const sb = await getSupabase();
+    if (!sb) {
+      $("#poolHint").textContent = "无法连接同步服务";
+      box.style.display = "flex";
+      return;
+    }
+    const [, word] = String(wordKey).split(":");
+    $("#poolTitle").textContent = `妙计池 · ${word}`;
+    $("#poolHint").textContent = "来自其他使用者的共享妙计，点赞越多越靠前（不显示账号）";
+    box.style.display = "flex";
+    const { data, error } = await sb.from("note_shares").select("id,text,likes").eq("word_key", wordKey).limit(100);
+    if (error || !data || !data.length) {
+      $("#poolList").innerHTML = `<p class="hint">还没有人共享这个单词的妙计，先去写一条吧。</p>`;
+      return;
+    }
+    const uid = authSession.user.id;
+    const list = data.sort((a, b) => (b.likes || []).length - (a.likes || []).length);
+    $("#poolList").innerHTML = list
+      .map((s) => {
+        const liked = (s.likes || []).includes(uid);
+        return `<div class="pool-item">
+          <div class="pool-text">${esc(s.text)}</div>
+          <button class="btn ${liked ? "good" : "ghost"} sm pool-like" data-id="${s.id}" data-liked="${liked ? 1 : 0}">${liked ? "♥" : "♡"} ${(s.likes || []).length}</button>
+        </div>`;
+      })
+      .join("");
+    $$(".pool-like", $("#poolList")).forEach((b) =>
+      b.addEventListener("click", async () => {
+        try {
+          await sb.rpc("toggle_share_like", { p_share_id: b.dataset.id, p_user_id: uid });
+          openPool(wordKey);
+        } catch (e) {
+          $("#poolHint").textContent = "点赞失败：" + (e.message || e);
+        }
+      })
+    );
+  }
+  function showUpdateModal() {
+    if (getSetting("sharePrompted")) return;
+    const m = $("#updateModal");
+    if (m) m.style.display = "flex";
+  }
+  async function submitFeedback() {
+    const content = ($("#feedbackInput").value || "").trim();
+    const st = $("#feedbackStatus");
+    if (!st) return;
+    if (!content) {
+      st.textContent = "请先写点内容";
+      return;
+    }
+    if (!authSession || !authSession.user) {
+      st.textContent = "请先登录后再提交";
+      return;
+    }
+    const sb = await getSupabase();
+    if (!sb) {
+      st.textContent = "无法连接同步服务";
+      return;
+    }
+    const { error } = await sb.from("feedback").insert({ user_id: authSession.user.id, content });
+    if (error) {
+      st.textContent = "提交失败：" + error.message;
+      return;
+    }
+    st.textContent = "已提交，感谢反馈！";
+    $("#feedbackInput").value = "";
+  }
+
   /* ---------------- 登录 / 注册 ---------------- */
   async function authLogin() {
     const email = ($("#authEmail")?.value || "").trim();
@@ -314,6 +456,7 @@
     go("home");
     showWelcomeModal();
     syncNow().catch(() => {});
+    scheduleShareSync();
   }
   async function authSignup() {
     const email = ($("#authEmail")?.value || "").trim();
@@ -344,6 +487,7 @@
       go("home");
       showWelcomeModal();
       syncNow().catch(() => {});
+      scheduleShareSync();
     } else {
       setSyncStatus("注册成功，请到邮箱点确认链接后再登录（或在 Supabase 中关闭邮件确认）");
     }
@@ -393,8 +537,8 @@
     const n = getNotes();
     let nc = false;
     for (const k of Object.keys(n)) {
-      if (typeof n[k] === "string") {
-        n[k] = { t: n[k], at: 0 };
+      if (!n[k] || !Array.isArray(n[k].items)) {
+        n[k] = normalizeNoteEntry(n[k]);
         nc = true;
       }
     }
@@ -433,14 +577,67 @@
   function setNote(key, text) {
     const n = getNotes();
     const t = String(text || "").trim();
-    if (t) n[key] = { t, at: Date.now() };
-    else delete n[key];
+    let entry = n[key];
+    if (!entry || !Array.isArray(entry.items)) entry = n[key] = { items: [], cur: 0 };
+    if (t) {
+      if (entry.items[entry.cur]) {
+        entry.items[entry.cur].t = t;
+        entry.items[entry.cur].at = Date.now();
+      } else {
+        entry.items.push({ id: "n" + Date.now(), t, at: Date.now() });
+        entry.cur = entry.items.length - 1;
+      }
+    } else if (entry.items.length && entry.items[entry.cur]) {
+      // 清空当前妙计文本时保留条目（避免误删），置空
+      entry.items[entry.cur].t = "";
+      entry.items[entry.cur].at = Date.now();
+    }
+    if (!entry.items.length) delete n[key];
     store.set(LS.notes, n);
     markDirty();
+    scheduleShareSync();
+  }
+  function getNoteItems(key) {
+    const v = getNotes()[key];
+    if (v && Array.isArray(v.items)) return v.items;
+    return [];
+  }
+  function addNote(key, text) {
+    const n = getNotes();
+    let entry = n[key];
+    if (!entry || !Array.isArray(entry.items)) entry = n[key] = { items: [], cur: 0 };
+    entry.items.push({ id: "n" + Date.now(), t: String(text || ""), at: Date.now() });
+    entry.cur = entry.items.length - 1;
+    store.set(LS.notes, n);
+    markDirty();
+    scheduleShareSync();
+  }
+  function selectNote(key, idx) {
+    const n = getNotes();
+    const entry = n[key];
+    if (entry && Array.isArray(entry.items)) {
+      entry.cur = Math.max(0, Math.min(idx, entry.items.length - 1));
+      store.set(LS.notes, n);
+      markDirty();
+      scheduleShareSync();
+    }
+  }
+  function deleteNote(key, idx) {
+    const n = getNotes();
+    const entry = n[key];
+    if (!entry || !Array.isArray(entry.items)) return;
+    entry.items.splice(idx, 1);
+    if (entry.cur >= entry.items.length) entry.cur = Math.max(0, entry.items.length - 1);
+    if (!entry.items.length) delete n[key];
+    store.set(LS.notes, n);
+    markDirty();
+    scheduleShareSync();
   }
   function getNote(key) {
     const v = getNotes()[key];
-    return v && typeof v === "object" ? v.t || "" : v || "";
+    if (v && Array.isArray(v.items) && v.items[v.cur]) return v.items[v.cur].t || "";
+    if (v && typeof v === "object" && v.t) return v.t || "";
+    return typeof v === "string" ? v : "";
   }
   function statusOf(key) {
     const p = getProgress()[key];
@@ -544,6 +741,7 @@
   let activeView = "home";
 
   function go(view, opts) {
+    setImmSheet(false);
     activeView = view;
     $$(".nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
     $$(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + view));
@@ -560,6 +758,7 @@
     else if (view === "library") renderLibrary();
     else if (view === "immerse") renderImmerse();
     else if (view === "cards") renderCardsSetup();
+    else if (view === "mask") renderMaskSetup();
     else if (view === "quiz") renderQuizSetup();
     else if (view === "fav") renderFav();
     else if (view === "notes") renderNotes();
@@ -567,6 +766,11 @@
   }
 
   document.addEventListener("click", (e) => {
+    const poolBtn = e.target.closest("[data-pool]");
+    if (poolBtn) {
+      openPool(poolBtn.dataset.pool);
+      return;
+    }
     const speakBtn = e.target.closest("[data-speak]");
     if (speakBtn) {
       speakText(speakBtn.dataset.speak);
@@ -603,6 +807,10 @@
   function renderHome() {
     const ht = $("#homeTheme");
     if (ht) ht.value = getSetting("theme") || "pink";
+    const shareTog = $("#shareToggle");
+    if (shareTog) shareTog.checked = getSetting("shareNotes") === true;
+    const shareSt = $("#shareStatus");
+    if (shareSt) shareSt.textContent = getSetting("shareNotes") === true ? "已开启" : "未开启";
     const stats = getStats();
     const pct = stats.total ? Math.round((stats.mastered / stats.total) * 100) : 0;
     const ring = $("#ringFg");
@@ -1049,11 +1257,21 @@
     }
     $("#meaningBox").textContent = w.m || "（无释义）";
     const noteInput = $("#noteInput");
-    noteInput.value = getNote(key);
-    $("#noteSave").textContent = notes[key] ? "已保存" : "未填写";
-    $("#noteTip").textContent = notes[key]
+    const noteEntry = notes[key];
+    const items = noteEntry && Array.isArray(noteEntry.items) ? noteEntry.items : [];
+    const curIdx = noteEntry && Array.isArray(noteEntry.items) ? noteEntry.cur || 0 : 0;
+    noteInput.value = items[curIdx] ? items[curIdx].t : "";
+    $("#noteSave").textContent = items.length ? `第 ${curIdx + 1} / ${items.length} 条` : "未填写";
+    $("#noteTip").textContent = items.length
       ? "妙计已保存到你的账号，可继续修改"
       : "例如：ambition 读起来像「俺必胜」→ 我有必胜的决心 → 野心、抱负";
+    const noteSel = $("#noteSelect");
+    if (noteSel) {
+      noteSel.innerHTML =
+        items
+          .map((it, i) => `<option value="${i}" ${i === curIdx ? "selected" : ""}>妙计 ${i + 1}${it.t ? "：" + esc(it.t.slice(0, 14)) : "（空）"}</option>`)
+          .join("") || `<option value="0">（暂无妙计）</option>`;
+    }
     const favBtn = $("#btnFav");
     favBtn.textContent = getFav()[key] ? "♥ 已收藏" : "♡ 收藏";
     favBtn.classList.toggle("soft", !getFav()[key]);
@@ -1273,6 +1491,139 @@
   }
 
   /* ---------------- 记忆测试 ---------------- */
+  /* ---------------- 遮罩记忆 ---------------- */
+  let maskWords = [];
+  let maskLongTimer = null;
+
+  function renderMaskSetup() {
+    const sel = $("#maskScope");
+    sel.innerHTML = scopeOptions();
+    sel.value = getSetting("maskScope") || scopeValue(navState.scope || { type: "all" });
+    $("#maskMode").value = getSetting("maskMode") || "cn";
+    $("#maskList").style.display = "none";
+    $("#maskHint").textContent = "点击遮罩显示内容，点击已显示的一侧发音；手机端右滑单词条显示操作按钮、长按查看妙计；电脑端悬停显示按钮、右键查看妙计。";
+  }
+
+  function startMask() {
+    const scope = scopeFromValue($("#maskScope").value);
+    navState.scope = scope;
+    setSetting("maskScope", $("#maskScope").value);
+    maskWords = scopeWords(scope);
+    setSetting("maskMode", $("#maskMode").value);
+    $("#maskList").style.display = "";
+    renderMaskList();
+  }
+
+  function renderMaskList() {
+    const mode = $("#maskMode").value;
+    const box = $("#maskList");
+    box.innerHTML = maskWords
+      .map((w, i) => {
+        const key = wKey(w);
+        const maskCn = mode === "cn";
+        const maskEn = mode === "en";
+        return `<div class="mask-row" data-i="${i}" data-key="${esc(key)}">
+          <div class="mask-actions">
+            <button class="btn bad sm" data-act="dont">不认识</button>
+            <button class="btn fuzzy sm" data-act="fuzzy">模糊</button>
+            <button class="btn good sm" data-act="know">认识</button>
+          </div>
+          <div class="mask-body">
+            <div class="mask-word ${maskEn ? "masked" : ""}" data-side="word">
+              <span class="mask-num">${i + 1}</span>
+              <b>${esc(w.w)}</b>
+              <span class="mask-cover">点击显示</span>
+            </div>
+            <div class="mask-meaning ${maskCn ? "masked" : ""}" data-side="meaning">
+              <span class="mask-cover">点击显示</span>
+              <span class="mask-text">${esc(w.m)}</span>
+            </div>
+          </div>
+        </div>`;
+      })
+      .join("");
+    bindMaskRows();
+  }
+
+  function bindMaskRows() {
+    const box = $("#maskList");
+    const mode = $("#maskMode").value;
+    const maskSide = mode === "cn" ? "meaning" : mode === "en" ? "word" : null;
+    $$(".mask-row", box).forEach((row) => {
+      const w = maskWords[Number(row.dataset.i)];
+      const key = wKey(w);
+      $$("[data-side]", row).forEach((side) => {
+        side.addEventListener("click", (e) => {
+          if (side.dataset.side === maskSide) {
+            if (side.classList.contains("masked")) {
+              side.classList.remove("masked");
+              speakText(w.w);
+            } else {
+              side.classList.add("masked");
+            }
+          } else {
+            speakText(w.w);
+          }
+        });
+      });
+      // 桌面端：鼠标移到英文侧才显示按钮
+      if (window.matchMedia && window.matchMedia("(hover: hover)").matches) {
+        const wordSide = row.querySelector('[data-side="word"]');
+        if (wordSide) {
+          wordSide.addEventListener("mouseenter", () => row.classList.add("open"));
+          wordSide.addEventListener("mouseleave", () => row.classList.remove("open"));
+        }
+      }
+      $$("[data-act]", row).forEach((btn) => {
+        btn.addEventListener("click", () => {
+          markWord(w, btn.dataset.act === "know" ? "m" : "l");
+          row.classList.add("marked");
+          row.classList.remove("open");
+        });
+      });
+      row.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        openMaskNote(w);
+      });
+      row.addEventListener("touchstart", () => {
+        clearTimeout(maskLongTimer);
+        maskLongTimer = setTimeout(() => openMaskNote(w), 550);
+      }, { passive: true });
+      row.addEventListener("touchend", () => clearTimeout(maskLongTimer));
+      row.addEventListener("touchmove", () => clearTimeout(maskLongTimer), { passive: true });
+      let startX = 0;
+      let startY = 0;
+      row.addEventListener(
+        "touchstart",
+        (e) => {
+          const t = e.changedTouches[0];
+          startX = t.clientX;
+          startY = t.clientY;
+        },
+        { passive: true }
+      );
+      row.addEventListener(
+        "touchend",
+        (e) => {
+          const t = e.changedTouches[0];
+          const dx = t.clientX - startX;
+          const dy = t.clientY - startY;
+          if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+            row.classList.toggle("open", dx > 0);
+          }
+        },
+        { passive: true }
+      );
+    });
+  }
+
+  function openMaskNote(w) {
+    $("#maskNoteWord").textContent = w.w;
+    $("#maskNoteMeaning").textContent = w.m || "（无释义）";
+    $("#maskNoteText").textContent = getNote(wKey(w)) ? "✍️ 妙计：" + getNote(wKey(w)) : "（还没有妙计，去沉浸学习里写一条吧）";
+    $("#maskNoteModal").style.display = "flex";
+  }
+
   let quizQ = [];
   let quizIdx = 0;
   let quizScore = 0;
@@ -1431,16 +1782,23 @@
       .map((w) => {
         const key = wKey(w);
         const st = statusOf(key);
+        const items = getNoteItems(key);
+        const curIdx = items.length ? (getNotes()[key].cur || 0) : 0;
         return `<div class="fav-row">
           <div>
             <div class="word-speak-line">
               <div class="fw" data-key="${esc(key)}">${esc(w.w)}</div>
               <button class="speak-btn sm" data-speak="${esc(w.w)}">🔊</button>
+              <button class="speak-btn sm" data-pool="${esc(key)}">🌐</button>
             </div>
             <div class="nm-tag">Lesson ${w.lesson} · Unit ${w.unit}</div>
             <span class="status-chip ${st === "m" ? "m" : ""}">${st === "m" ? "已掌握" : st === "l" ? "学习中" : "未标记"}</span>
           </div>
           <div class="fm">${esc(w.m)}</div>
+          <div class="note-tools">
+            <select data-key="${esc(key)}" data-note-sel class="select-input sm"></select>
+            <button class="btn soft sm" data-key="${esc(key)}" data-note-add>＋ 新建</button>
+          </div>
           <textarea data-key="${esc(key)}" rows="2" placeholder="我的妙计…">${esc(getNote(key))}</textarea>
           <div class="note-meta">
             <button class="btn ghost sm" data-unfav="${esc(key)}">移除</button>
@@ -1462,6 +1820,25 @@
       ta.addEventListener("input", () => {
         clearTimeout(t);
         t = setTimeout(() => setNote(ta.dataset.key, ta.value), 400);
+      });
+    });
+    $$("[data-note-sel]", box).forEach((sel) => {
+      const items = getNoteItems(sel.dataset.key);
+      const curIdx = items.length ? getNotes()[sel.dataset.key].cur || 0 : 0;
+      sel.innerHTML =
+        items
+          .map((it, i) => `<option value="${i}" ${i === curIdx ? "selected" : ""}>妙计 ${i + 1}${it.t ? "：" + esc(it.t.slice(0, 12)) : "（空）"}</option>`)
+          .join("") || `<option value="0">（暂无妙计）</option>`;
+      sel.addEventListener("change", () => {
+        selectNote(sel.dataset.key, Number(sel.value));
+        const ta = box.querySelector(`textarea[data-key="${CSS.escape(sel.dataset.key)}"]`);
+        if (ta) ta.value = getNote(sel.dataset.key);
+      });
+    });
+    $$("[data-note-add]", box).forEach((btn) => {
+      btn.addEventListener("click", () => {
+        addNote(btn.dataset.key, "");
+        renderFav();
       });
     });
   }
@@ -1494,7 +1871,7 @@
   }
 
   function updateNotesStat() {
-    const filled = WORDS.filter((w) => getNote(wKey(w))).length;
+    const filled = WORDS.filter((w) => getNoteItems(wKey(w)).some((it) => it.t)).length;
     $("#notesStat").innerHTML = `已填妙计 <b>${filled}</b> / ${TOTAL} · 未填 <b>${TOTAL - filled}</b>`;
   }
 
@@ -1510,16 +1887,23 @@
     box.innerHTML = slice
       .map((w) => {
         const key = wKey(w);
-        const has = !!getNote(key);
+        const items = getNoteItems(key);
+        const has = items.some((it) => it.t);
+        const curIdx = items.length ? getNotes()[key].cur || 0 : 0;
         return `<div class="note-row">
           <div>
             <div class="word-speak-line">
               <div class="nw" data-key="${esc(key)}">${esc(w.w)}</div>
               <button class="speak-btn sm" data-speak="${esc(w.w)}">🔊</button>
+              <button class="speak-btn sm" data-pool="${esc(key)}">🌐</button>
             </div>
             <div class="nm-tag">L${w.lesson} · U${w.unit} · ${has ? "✍️ 已填" : "未填"}</div>
           </div>
           <div class="nm">${esc(w.m)}</div>
+          <div class="note-tools">
+            <select data-key="${esc(key)}" data-note-sel class="select-input sm"></select>
+            <button class="btn soft sm" data-key="${esc(key)}" data-note-add>＋ 新建</button>
+          </div>
           <textarea data-key="${esc(key)}" rows="2" placeholder="写下妙计…">${esc(getNote(key))}</textarea>
           <div class="note-meta">
             <span class="nm-tag">${esc(w.g || "")}</span>
@@ -1539,6 +1923,26 @@
           const meta = ta.closest(".note-row")?.querySelector(".nm-tag");
           if (meta) meta.textContent = ta.value.trim() ? "✍️ 已填" : "未填";
         }, 400);
+      });
+    });
+    $$("[data-note-sel]", box).forEach((sel) => {
+      const items = getNoteItems(sel.dataset.key);
+      const curIdx = items.length ? getNotes()[sel.dataset.key].cur || 0 : 0;
+      sel.innerHTML =
+        items
+          .map((it, i) => `<option value="${i}" ${i === curIdx ? "selected" : ""}>妙计 ${i + 1}${it.t ? "：" + esc(it.t.slice(0, 12)) : "（空）"}</option>`)
+          .join("") || `<option value="0">（暂无妙计）</option>`;
+      sel.addEventListener("change", () => {
+        selectNote(sel.dataset.key, Number(sel.value));
+        const ta = box.querySelector(`textarea[data-key="${CSS.escape(sel.dataset.key)}"]`);
+        if (ta) ta.value = getNote(sel.dataset.key);
+        updateNotesStat();
+      });
+    });
+    $$("[data-note-add]", box).forEach((btn) => {
+      btn.addEventListener("click", () => {
+        addNote(btn.dataset.key, "");
+        drawNotes();
       });
     });
   }
@@ -1710,6 +2114,54 @@
       });
     }
 
+    // 共享妙计
+    $("#shareToggle").addEventListener("change", () => {
+      const on = $("#shareToggle").checked;
+      setSetting("shareNotes", on);
+      renderHome();
+      if (on) scheduleShareSync();
+      else syncShares().catch(() => {});
+    });
+    $("#poolBtn").addEventListener("click", () => {
+      const w = immList[navState.immIndex];
+      if (w) openPool(wKey(w));
+    });
+    $("#poolClose").addEventListener("click", () => {
+      $("#poolModal").style.display = "none";
+    });
+    $("#poolModal").addEventListener("click", (e) => {
+      if (e.target === $("#poolModal")) $("#poolModal").style.display = "none";
+    });
+    $("#updateShareYes").addEventListener("click", () => {
+      setSetting("sharePrompted", true);
+      setSetting("shareNotes", true);
+      $("#updateModal").style.display = "none";
+      renderHome();
+      scheduleShareSync();
+    });
+    $("#updateShareNo").addEventListener("click", () => {
+      setSetting("sharePrompted", true);
+      setSetting("shareNotes", false);
+      $("#updateModal").style.display = "none";
+      renderHome();
+    });
+
+    // 遮罩记忆
+    $("#maskStart").addEventListener("click", startMask);
+    $("#maskMode").addEventListener("change", () => {
+      setSetting("maskMode", $("#maskMode").value);
+      if ($("#maskList").style.display !== "none") renderMaskList();
+    });
+    $("#maskNoteClose").addEventListener("click", () => {
+      $("#maskNoteModal").style.display = "none";
+    });
+    $("#maskNoteModal").addEventListener("click", (e) => {
+      if (e.target === $("#maskNoteModal")) $("#maskNoteModal").style.display = "none";
+    });
+
+    // 意见箱
+    $("#feedbackSubmit").addEventListener("click", submitFeedback);
+
     // 沉浸
     $("#immPrevBtn").addEventListener("click", () => immStep(-1));
     $("#immNextBtn").addEventListener("click", () => immStep(1));
@@ -1722,6 +2174,32 @@
     const immBackdrop = document.getElementById("immBackdrop");
     if (immBackdrop) immBackdrop.addEventListener("click", () => setImmSheet(false));
     $("#noteInput").addEventListener("input", saveNoteDebounced);
+    $("#noteSelect").addEventListener("change", () => {
+      const w = immList[navState.immIndex];
+      if (w) {
+        selectNote(wKey(w), Number($("#noteSelect").value));
+        renderImmWord();
+      }
+    });
+    $("#noteAdd").addEventListener("click", () => {
+      const w = immList[navState.immIndex];
+      if (w) {
+        addNote(wKey(w), "");
+        renderImmWord();
+        $("#noteInput").focus();
+      }
+    });
+    $("#noteDel").addEventListener("click", () => {
+      const w = immList[navState.immIndex];
+      if (w) {
+        const key = wKey(w);
+        const entry = getNotes()[key];
+        if (entry && Array.isArray(entry.items) && entry.items.length) {
+          deleteNote(key, entry.cur || 0);
+          renderImmWord();
+        }
+      }
+    });
     $("#btnKnow").addEventListener("click", () => {
       const w = immList[navState.immIndex];
       if (w) {
@@ -1932,7 +2410,7 @@
       let changed = false;
       for (const [k, v] of Object.entries(window.BOOK_NOTES)) {
         if (v && !n[k]) {
-          n[k] = { t: v, at: 0 };
+          n[k] = { items: [{ id: "b" + k.replace(/[^a-zA-Z0-9]/g, ""), t: v, at: 0 }], cur: 0 };
           changed = true;
         }
       }
@@ -1954,6 +2432,7 @@
     setInterval(clock, 1000);
     const hash = location.hash.replace("#", "");
     go(hash && document.getElementById("view-" + hash) ? hash : "home");
+    setTimeout(showUpdateModal, 1200);
     // 配置了同步服务时：恢复登录态，已登录则自动同步一次
     const cfg = syncConfig();
     if (cfg && cfg.url && cfg.key) {
