@@ -410,7 +410,7 @@
     }
     const [, word] = String(wordKey).split(":");
     $("#poolTitle").textContent = `妙计池 · ${word}`;
-    $("#poolHint").textContent = "来自其他使用者的共享妙计，点赞越多越靠前（不显示账号）";
+    $("#poolHint").textContent = "点击「应用」可把该妙计复制到你的妙计中；点赞越多越靠前（不显示账号）";
     box.style.display = "flex";
     const { data, error } = await sb.from("note_shares").select("id,text,likes").eq("word_key", wordKey).limit(100);
     if (error) {
@@ -428,10 +428,20 @@
         const liked = (s.likes || []).includes(uid);
         return `<div class="pool-item">
           <div class="pool-text">${esc(s.text)}</div>
-          <button class="btn ${liked ? "good" : "ghost"} sm pool-like" data-id="${s.id}" data-liked="${liked ? 1 : 0}">${liked ? "♥" : "♡"} ${(s.likes || []).length}</button>
+          <div class="pool-actions">
+            <button class="btn soft sm pool-apply" data-text="${esc(s.text)}">应用</button>
+            <button class="btn ${liked ? "good" : "ghost"} sm pool-like" data-id="${s.id}" data-liked="${liked ? 1 : 0}">${liked ? "♥" : "♡"} ${(s.likes || []).length}</button>
+          </div>
         </div>`;
       })
       .join("");
+    $$(".pool-apply", $("#poolList")).forEach((b) =>
+      b.addEventListener("click", () => {
+        addNote(wordKey, b.dataset.text);
+        b.textContent = "已应用 ✓";
+        b.disabled = true;
+      })
+    );
     $$(".pool-like", $("#poolList")).forEach((b) =>
       b.addEventListener("click", async () => {
         try {

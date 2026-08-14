@@ -698,6 +698,8 @@ body.no-tts .speak-btn, body.no-tts [data-speak] { display: none !important; }
 .pool-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--line); text-align: left; }
 .pool-item:last-child { border-bottom: none; }
 .pool-text { flex: 1; color: var(--ink); font-size: 14px; line-height: 1.7; white-space: pre-wrap; }
+.pool-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; flex-shrink: 0; }
+.pool-actions .btn { min-width: 76px; }
 .pool-like { flex-shrink: 0; }
 .note-display { color: var(--ink-soft); font-size: 14px; line-height: 1.8; margin: 8px 0 12px; white-space: pre-wrap; }
 
