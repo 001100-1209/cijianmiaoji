@@ -178,7 +178,13 @@
     if (supabaseClient) return supabaseClient;
     const cfg = syncConfig();
     if (!cfg || !cfg.url || !cfg.key) return null;
-    const mod = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+    let mod = null;
+    try {
+      mod = await import("./js/supabase-js.mjs");
+    } catch (e) {
+      // 本地模块不可用时回退 CDN
+      mod = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+    }
     supabaseClient = mod.createClient(cfg.url, cfg.key, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
     });
@@ -221,6 +227,21 @@
   function atOfEntry(v) {
     return v && typeof v === "object" && v.at ? v.at : 0;
   }
+  function simpleHash(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+  }
+  function dedupeNoteItems(items) {
+    const byText = new Map();
+    for (const it of items || []) {
+      const t = (it.t || "").trim();
+      if (!t) continue;
+      const ex = byText.get(t);
+      if (!ex || (it.at || 0) > (ex.at || 0)) byText.set(t, it);
+    }
+    return Array.from(byText.values());
+  }
   function normalizeNoteEntry(v) {
     if (v && Array.isArray(v.items)) return v;
     const t = typeof v === "string" ? v : (v && v.t) || "";
@@ -239,7 +260,7 @@
         const ex = byId.get(it.id);
         if (!ex || (it.at || 0) > (ex.at || 0)) byId.set(it.id, it);
       }
-      const items = Array.from(byId.values()).filter((x) => x.t);
+      const items = dedupeNoteItems(Array.from(byId.values()).filter((x) => x.t));
       if (!items.length) continue;
       const curId = (l.items[l.cur] || {}).id;
       let cur = items.findIndex((x) => x.id === curId);
@@ -340,10 +361,16 @@
     }
     const notes = getNotes();
     const rows = [];
+    const seen = new Set();
     for (const [key, entry] of Object.entries(notes)) {
       if (!entry || !Array.isArray(entry.items) || !key.includes(":")) continue;
       entry.items.forEach((it) => {
-        if (it.t) rows.push({ note_id: it.id, word_key: key, text: it.t, user_id: uid });
+        if (!it.t) return;
+        const noteId = "h" + simpleHash(it.t);
+        const rk = key + "::" + noteId;
+        if (seen.has(rk)) return;
+        seen.add(rk);
+        rows.push({ note_id: noteId, word_key: key, text: it.t, user_id: uid });
       });
     }
     const { data: existing } = await sb.from("note_shares").select("note_id").eq("user_id", uid);
@@ -375,7 +402,11 @@
     $("#poolHint").textContent = "来自其他使用者的共享妙计，点赞越多越靠前（不显示账号）";
     box.style.display = "flex";
     const { data, error } = await sb.from("note_shares").select("id,text,likes").eq("word_key", wordKey).limit(100);
-    if (error || !data || !data.length) {
+    if (error) {
+      $("#poolList").innerHTML = `<p class="hint">打开失败：${esc(error.message)}<br>请确认已在 Supabase 建好 note_shares 表。</p>`;
+      return;
+    }
+    if (!data || !data.length) {
       $("#poolList").innerHTML = `<p class="hint">还没有人共享这个单词的妙计，先去写一条吧。</p>`;
       return;
     }
@@ -540,6 +571,15 @@
       if (!n[k] || !Array.isArray(n[k].items)) {
         n[k] = normalizeNoteEntry(n[k]);
         nc = true;
+      }
+      if (n[k] && Array.isArray(n[k].items)) {
+        const before = n[k].items.length;
+        n[k].items = dedupeNoteItems(n[k].items);
+        if (n[k].items.length !== before) nc = true;
+        if (n[k].cur >= n[k].items.length) {
+          n[k].cur = Math.max(0, n[k].items.length - 1);
+          nc = true;
+        }
       }
     }
     if (nc) store.set(LS.notes, n);
