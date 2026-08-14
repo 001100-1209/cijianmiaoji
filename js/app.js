@@ -343,6 +343,7 @@
 
   /* ---------------- 妙计共享池 ---------------- */
   let shareSyncTimer = null;
+  let shareSyncing = false;
   function scheduleShareSync() {
     clearTimeout(shareSyncTimer);
     shareSyncTimer = setTimeout(() => {
@@ -351,6 +352,8 @@
   }
   async function syncShares() {
     if (!authSession || !authSession.user) return;
+    if (shareSyncing) return;
+    shareSyncing = true;
     try {
       const sb = await getSupabase();
       if (!sb) return;
@@ -369,7 +372,7 @@
         if (!entry || !Array.isArray(entry.items) || !key.includes(":")) continue;
         entry.items.forEach((it) => {
           if (!it.t) return;
-          const noteId = "h" + simpleHash(it.t);
+          const noteId = "h" + simpleHash(key + "::" + it.t);
           const rk = key + "::" + noteId;
           if (seen.has(rk)) return;
           seen.add(rk);
@@ -385,6 +388,8 @@
       if (st) st.textContent = `已共享 ${rows.length} 条`;
     } catch (e) {
       console.warn("共享同步失败", e && e.message ? e.message : e);
+    } finally {
+      shareSyncing = false;
     }
   }
   async function openPool(wordKey) {
