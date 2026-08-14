@@ -667,8 +667,14 @@
     const n = getNotes();
     let entry = n[key];
     if (!entry || !Array.isArray(entry.items)) entry = n[key] = { items: [], cur: 0 };
-    entry.items.push({ id: "n" + Date.now(), t: String(text || ""), at: Date.now() });
-    entry.cur = entry.items.length - 1;
+    const t = String(text || "").trim();
+    const idx = entry.items.findIndex((it) => (it.t || "").trim() === t);
+    if (idx >= 0) {
+      entry.cur = idx;
+    } else {
+      entry.items.push({ id: "n" + Date.now(), t, at: Date.now() });
+      entry.cur = entry.items.length - 1;
+    }
     store.set(LS.notes, n);
     markDirty();
     scheduleShareSync();
