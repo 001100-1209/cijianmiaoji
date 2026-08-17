@@ -341,6 +341,26 @@
     }
   }
 
+  /* ---------------- 妙计归属与共享过滤 ---------------- */
+  // 正在编辑中的单词 key 集合：编辑期间不共享，失焦后再上传
+  let editingKeys = new Set();
+  // 只有用户自己编写/编辑过的妙计才允许共享（src=u）
+  function isShareableItem(it, key) {
+    if (!it || !it.t) return false;
+    if (it.src === "b" || it.src === "p") return false;
+    if (it.src === "u") return true;
+    // 旧数据没有 src 标记：按 id 和书中内容推断
+    if (it.id && it.id.indexOf("b") === 0) return false;
+    if (window.BOOK_NOTES && window.BOOK_NOTES[key] === it.t) return false;
+    return true;
+  }
+  function flushNoteSave(key, el) {
+    if (!key) return;
+    setNote(key, el ? el.value : "");
+    editingKeys.delete(key);
+    scheduleShareSync();
+  }
+
   /* ---------------- 妙计共享池 ---------------- */
   let shareSyncTimer = null;
   let shareSyncing = false;
@@ -370,8 +390,9 @@
       const seen = new Set();
       for (const [key, entry] of Object.entries(notes)) {
         if (!entry || !Array.isArray(entry.items) || !key.includes(":")) continue;
+        if (editingKeys.has(key)) continue;
         entry.items.forEach((it) => {
-          if (!it.t) return;
+          if (!isShareableItem(it, key)) return;
           const noteId = "h" + simpleHash(key + "::" + it.t);
           const rk = key + "::" + noteId;
           if (seen.has(rk)) return;
@@ -437,7 +458,7 @@
       .join("");
     $$(".pool-apply", $("#poolList")).forEach((b) =>
       b.addEventListener("click", () => {
-        addNote(wordKey, b.dataset.text);
+        addNote(wordKey, b.dataset.text, "p");
         b.textContent = "已应用 ✓";
         b.disabled = true;
       })
@@ -667,14 +688,16 @@
       if (entry.items[entry.cur]) {
         entry.items[entry.cur].t = t;
         entry.items[entry.cur].at = Date.now();
+        entry.items[entry.cur].src = "u";
       } else {
-        entry.items.push({ id: "n" + Date.now(), t, at: Date.now() });
+        entry.items.push({ id: "n" + Date.now(), t, at: Date.now(), src: "u" });
         entry.cur = entry.items.length - 1;
       }
     } else if (entry.items.length && entry.items[entry.cur]) {
       // 清空当前妙计文本时保留条目（避免误删），置空
       entry.items[entry.cur].t = "";
       entry.items[entry.cur].at = Date.now();
+      entry.items[entry.cur].src = "u";
     }
     if (!entry.items.length) delete n[key];
     store.set(LS.notes, n);
@@ -686,7 +709,7 @@
     if (v && Array.isArray(v.items)) return v.items;
     return [];
   }
-  function addNote(key, text) {
+  function addNote(key, text, src) {
     const n = getNotes();
     let entry = n[key];
     if (!entry || !Array.isArray(entry.items)) entry = n[key] = { items: [], cur: 0 };
@@ -695,7 +718,7 @@
     if (idx >= 0) {
       entry.cur = idx;
     } else {
-      entry.items.push({ id: "n" + Date.now(), t, at: Date.now() });
+      entry.items.push({ id: "n" + Date.now(), t, at: Date.now(), src: src || "u" });
       entry.cur = entry.items.length - 1;
     }
     store.set(LS.notes, n);
@@ -831,6 +854,11 @@
   let activeView = "home";
 
   function go(view, opts) {
+    if (activeView === "immerse" && view !== "immerse") {
+      const w = immList[navState.immIndex];
+      const ni = $("#noteInput");
+      if (w && ni) flushNoteSave(wKey(w), ni);
+    }
     setImmSheet(false);
     activeView = view;
     $$(".nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
@@ -1398,6 +1426,7 @@
   function saveNoteDebounced() {
     const w = immList[navState.immIndex];
     if (!w) return;
+    editingKeys.add(wKey(w));
     clearTimeout(noteTimer);
     noteTimer = setTimeout(() => {
       setNote(wKey(w), $("#noteInput").value);
@@ -1413,6 +1442,8 @@
 
   function immStep(delta) {
     if (!immList.length) return;
+    const ni = $("#noteInput");
+    if (ni && document.activeElement === ni) ni.blur();
     navState.immIndex = (navState.immIndex + delta + immList.length) % immList.length;
     renderImmWord();
   }
@@ -1934,9 +1965,11 @@
     $$("textarea[data-key]", box).forEach((ta) => {
       let t = null;
       ta.addEventListener("input", () => {
+        editingKeys.add(ta.dataset.key);
         clearTimeout(t);
         t = setTimeout(() => setNote(ta.dataset.key, ta.value), 400);
       });
+      ta.addEventListener("blur", () => flushNoteSave(ta.dataset.key, ta));
     });
     $$("[data-note-sel]", box).forEach((sel) => {
       const items = getNoteItems(sel.dataset.key);
@@ -2032,6 +2065,7 @@
     $$("textarea[data-key]", box).forEach((ta) => {
       let t = null;
       ta.addEventListener("input", () => {
+        editingKeys.add(ta.dataset.key);
         clearTimeout(t);
         t = setTimeout(() => {
           setNote(ta.dataset.key, ta.value);
@@ -2039,6 +2073,12 @@
           const meta = ta.closest(".note-row")?.querySelector(".nm-tag");
           if (meta) meta.textContent = ta.value.trim() ? "✍️ 已填" : "未填";
         }, 400);
+      });
+      ta.addEventListener("blur", () => {
+        flushNoteSave(ta.dataset.key, ta);
+        updateNotesStat();
+        const meta = ta.closest(".note-row")?.querySelector(".nm-tag");
+        if (meta) meta.textContent = ta.value.trim() ? "✍️ 已填" : "未填";
       });
     });
     $$("[data-note-sel]", box).forEach((sel) => {
@@ -2309,6 +2349,11 @@
     const immBackdrop = document.getElementById("immBackdrop");
     if (immBackdrop) immBackdrop.addEventListener("click", () => setImmSheet(false));
     $("#noteInput").addEventListener("input", saveNoteDebounced);
+    $("#noteInput").addEventListener("blur", () => {
+      const w = immList[navState.immIndex];
+      if (!w) return;
+      flushNoteSave(wKey(w), $("#noteInput"));
+    });
     $("#noteSelect").addEventListener("change", () => {
       const w = immList[navState.immIndex];
       if (w) {
@@ -2545,7 +2590,7 @@
       let changed = false;
       for (const [k, v] of Object.entries(window.BOOK_NOTES)) {
         if (v && !n[k]) {
-          n[k] = { items: [{ id: "b" + k.replace(/[^a-zA-Z0-9]/g, ""), t: v, at: 0 }], cur: 0 };
+          n[k] = { items: [{ id: "b" + k.replace(/[^a-zA-Z0-9]/g, ""), t: v, at: 0, src: "b" }], cur: 0 };
           changed = true;
         }
       }
