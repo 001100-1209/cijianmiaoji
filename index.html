@@ -4,13 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>词间妙记 · Words in Bloom</title>
-  <link rel="manifest" href="manifest.webmanifest?v=5" />
+  <link rel="manifest" href="manifest.webmanifest?v=6" />
   <meta name="theme-color" content="#e88fae" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="词间妙记" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="stylesheet" href="css/style.css?v=5" />
+  <link rel="stylesheet" href="css/style.css?v=6" />
 </head>
 <body>
   <header class="topbar">
@@ -453,6 +453,16 @@
         </div>
         <div class="set-row">
           <div class="set-info">
+            <b>音量</b>
+            <span>手机上系统语音偏小的时候，可以调大音量</span>
+          </div>
+          <div class="set-control volume-control">
+            <input type="range" id="setVolume" min="0.2" max="1" step="0.05" value="1" />
+            <span id="volumeValue" class="volume-value">100%</span>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-info">
             <b>导出数据</b>
             <span>把妙计、进度、收藏备份成 JSON 文件</span>
           </div>
@@ -540,9 +550,9 @@
     </div>
   </div>
 
-  <script src="js/words.js?v=5"></script>
-  <script src="js/book-notes.js?v=5"></script>
-  <script src="js/supabase-config.js?v=5"></script>
-  <script src="js/app.js?v=5"></script>
+  <script src="js/words.js?v=6"></script>
+  <script src="js/book-notes.js?v=6"></script>
+  <script src="js/supabase-config.js?v=6"></script>
+  <script src="js/app.js?v=6"></script>
 </body>
 </html>

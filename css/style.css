@@ -634,6 +634,9 @@ body.no-tts .speak-btn, body.no-tts [data-speak] { display: none !important; }
 .set-info span { color: var(--ink-faint); font-size: 12px; }
 .set-control { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .set-control .select-input { max-width: 260px; }
+.volume-control { min-width: 220px; }
+.volume-control input[type="range"] { flex: 1 1 140px; min-width: 120px; accent-color: var(--pink-500, #e0506a); }
+.volume-value { font-size: 13px; font-weight: 600; color: var(--text-2, #7a7a8c); min-width: 44px; text-align: right; }
 .auth-form { display: flex; flex-direction: column; gap: 8px; padding: 4px 0 12px; }
 .auth-row .text-input { width: 100%; max-width: 100%; min-width: 0; }
 .voice-control { flex-wrap: wrap; justify-content: flex-end; max-width: 500px; }

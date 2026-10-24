@@ -95,6 +95,8 @@
       const u = new SpeechSynthesisUtterance(String(text || ""));
       u.lang = "en-US";
       u.rate = Number(getSetting("speakRate") || 0.85);
+      const vol = Number(getSetting("speakVolume"));
+      u.volume = isFinite(vol) && vol > 0 ? Math.min(vol, 1) : 1;
       const voices = window.speechSynthesis.getVoices();
       const chosen = voices.find((v) => v.voiceURI === getSetting("voiceURI"));
       if (chosen) {
@@ -443,7 +445,23 @@
       return;
     }
     const uid = authSession.user.id;
-    const list = data.sort((a, b) => (b.likes || []).length - (a.likes || []).length);
+    // 按文本去重合并（相同文本只显示一条，点赞数取并集，保留点赞最多的 id）
+    const byText = new Map();
+    for (const s of data || []) {
+      if (!(s.text || "").trim()) continue;
+      const ex = byText.get(s.text);
+      if (!ex) {
+        byText.set(s.text, { ...s, likes: [...(s.likes || [])] });
+      } else {
+        const merged = new Set([...(ex.likes || []), ...(s.likes || [])]);
+        ex.likes = Array.from(merged);
+        if ((s.likes || []).length > ((ex._srcLikes || 0))) {
+          ex.id = s.id;
+          ex._srcLikes = (s.likes || []).length;
+        }
+      }
+    }
+    const list = Array.from(byText.values()).sort((a, b) => (b.likes || []).length - (a.likes || []).length);
     $("#poolList").innerHTML = list
       .map((s) => {
         const liked = (s.likes || []).includes(uid);
@@ -2142,12 +2160,26 @@
   }
 
   /* ---------------- 设置 ---------------- */
+  function updateVolumeLabel() {
+    const el = $("#volumeValue");
+    const volEl = $("#setVolume");
+    if (!el) return;
+    const vol = Number(volEl ? volEl.value : getSetting("speakVolume"));
+    const pct = Math.round((isFinite(vol) && vol > 0 ? Math.min(vol, 1) : 1) * 100);
+    el.textContent = pct + "%";
+  }
   function renderSettings() {
     $("#setTheme").value = getSetting("theme") || "pink";
     $("#setSpeakImm").checked = getSetting("autoSpeakImmerse") !== false;
     $("#setSpeakCard").checked = getSetting("autoSpeakCards") !== false;
     populateVoiceOptions();
     $("#setRate").value = String(getSetting("speakRate") || 0.85);
+    const volEl = $("#setVolume");
+    if (volEl) {
+      const vol = Number(getSetting("speakVolume"));
+      volEl.value = String(isFinite(vol) && vol > 0 ? Math.min(vol, 1) : 1);
+      updateVolumeLabel();
+    }
     renderAuthArea();
     const hint = $("#syncHint");
     if (hint) {
@@ -2485,6 +2517,13 @@
     $("#setRate").addEventListener("change", () => {
       setSetting("speakRate", Number($("#setRate").value));
     });
+    const volEl = $("#setVolume");
+    if (volEl) {
+      volEl.addEventListener("input", () => {
+        setSetting("speakVolume", Number(volEl.value));
+        updateVolumeLabel();
+      });
+    }
     $("#voiceTest").addEventListener("click", () => {
       speakText("Hello, this is a pronunciation preview. Let the words you learn today settle into memory.");
     });
