@@ -612,19 +612,128 @@
     authSession = null;
     renderSettings();
   }
+  /* ---------------- 修改密码（登录后直接改，无需邮箱验证） ---------------- */
+  // 展开/收起修改密码表单；renderAuthArea 重绘后表单会消失，所以状态记在这里
+  let pwdFormOpen = false;
+  function setPwdStatus(msg, kind) {
+    const st = $("#pwdStatus");
+    if (!st) return;
+    st.textContent = msg || "";
+    st.style.color = kind === "error" ? "#d33" : kind === "ok" ? "#2a2" : "";
+  }
+  function togglePwdForm(open) {
+    pwdFormOpen = !!open;
+    const wrap = $("#pwdForm");
+    const btn = $("#authPwdBtn");
+    if (!wrap) return;
+    if (!pwdFormOpen) {
+      wrap.innerHTML = "";
+      if (btn) btn.textContent = "修改密码";
+      return;
+    }
+    if (btn) btn.textContent = "取消修改";
+    wrap.innerHTML = `<div class="auth-form">
+      <div class="auth-row"><input type="password" id="pwdNew" class="text-input" placeholder="新密码（至少 6 位）" autocomplete="new-password" /></div>
+      <div class="auth-row"><input type="password" id="pwdNew2" class="text-input" placeholder="再输一次新密码" autocomplete="new-password" /></div>
+      <div class="set-control">
+        <button class="btn primary sm" id="pwdSubmitBtn">确认修改</button>
+        <button class="btn ghost sm" id="pwdCancelBtn">取消</button>
+      </div>
+      <p class="hint" id="pwdStatus"></p>
+    </div>`;
+    const sub = $("#pwdSubmitBtn");
+    if (sub) sub.addEventListener("click", () => authChangePassword());
+    const can = $("#pwdCancelBtn");
+    if (can) can.addEventListener("click", () => togglePwdForm(false));
+    const first = $("#pwdNew");
+    if (first) first.focus();
+  }
+  async function authChangePassword() {
+    if (!authSession || !authSession.user) {
+      setPwdStatus("请先登录", "error");
+      return;
+    }
+    const newPw = $("#pwdNew")?.value || "";
+    const newPw2 = $("#pwdNew2")?.value || "";
+    if (newPw.length < 6) {
+      setPwdStatus("新密码至少 6 位", "error");
+      return;
+    }
+    if (newPw !== newPw2) {
+      setPwdStatus("两次输入的新密码不一致", "error");
+      return;
+    }
+    const sb = await getSupabase();
+    if (!sb) {
+      setPwdStatus("同步服务未配置，无法修改密码", "error");
+      return;
+    }
+    setPwdStatus("正在修改…");
+    const { error: e2 } = await sb.auth.updateUser({ password: newPw });
+    if (e2) {
+      setPwdStatus("修改失败：" + e2.message, "error");
+      return;
+    }
+    ["#pwdNew", "#pwdNew2"].forEach((s) => {
+      const el = $(s);
+      if (el) el.value = "";
+    });
+    setPwdStatus("密码已修改，下次请用新密码登录 ✓", "ok");
+    pwdFormOpen = false;
+    const btn = $("#authPwdBtn");
+    if (btn) btn.textContent = "修改密码";
+    const wrap = $("#pwdForm");
+    if (wrap) {
+      // 保留成功提示，稍后清空表单区域
+      setTimeout(() => {
+        if (wrap && !pwdFormOpen) wrap.innerHTML = "";
+      }, 6000);
+    }
+  }
   function renderAuthArea() {
     const box = $("#authArea");
     if (!box) return;
+    // renderSettings 会重绘整个区域（例如同步状态变化时），这里先把用户正在输入的内容暂存，
+    // 否则输入框会被清空：邮箱容易白填，密码框反复被清空尤其恼人。
+    // 只暂存邮箱与当前密码（登录用）；新密码只在"新密码"与"确认新密码"一致时才恢复，
+    // 避免把输入有误的内容悄悄带过来。
+    const prevEmail = $("#authEmail")?.value || "";
+    const prevPw = $("#authPw")?.value || "";
+    const prevNew = $("#pwdNew")?.value || "";
+    const prevNew2 = $("#pwdNew2")?.value || "";
+    const prevStatus = $("#pwdStatus")?.textContent || "";
+    const prevStatusColor = $("#pwdStatus")?.style.color || "";
     if (authSession && authSession.user) {
       box.innerHTML = `<div class="set-row">
         <div class="set-info">
           <b>当前账号</b>
           <span>${esc(authSession.user.email || authSession.user.id)}</span>
         </div>
-        <button class="btn ghost sm" id="authLogoutBtn">退出登录</button>
-      </div>`;
+        <div class="set-control">
+          <button class="btn soft sm" id="authPwdBtn">修改密码</button>
+          <button class="btn ghost sm" id="authLogoutBtn">退出登录</button>
+        </div>
+      </div>
+      <div id="pwdForm"></div>`;
       const lo = $("#authLogoutBtn");
       if (lo) lo.addEventListener("click", () => authLogout());
+      const pb = $("#authPwdBtn");
+      if (pb) pb.addEventListener("click", () => togglePwdForm(!pwdFormOpen));
+      // 重绘（例如同步后 renderSettings）时若表单处于展开状态，需要恢复
+      if (pwdFormOpen) {
+        togglePwdForm(true);
+        const n1 = $("#pwdNew");
+        if (n1 && prevNew) n1.value = prevNew;
+        const n2 = $("#pwdNew2");
+        if (n2 && prevNew && prevNew === prevNew2) n2.value = prevNew2;
+        if (prevStatus) {
+          const st = $("#pwdStatus");
+          if (st) {
+            st.textContent = prevStatus;
+            st.style.color = prevStatusColor;
+          }
+        }
+      }
     } else {
       box.innerHTML = `<div class="auth-form">
         <div class="auth-row"><input type="email" id="authEmail" class="text-input" placeholder="邮箱" autocomplete="email" /></div>
@@ -638,6 +747,11 @@
       if (l) l.addEventListener("click", () => authLogin());
       const s = $("#authSignupBtn");
       if (s) s.addEventListener("click", () => authSignup());
+      // 重绘后恢复用户已填的邮箱与密码，避免"填完又空了"
+      const em = $("#authEmail");
+      if (em && prevEmail) em.value = prevEmail;
+      const pwm = $("#authPw");
+      if (pwm && prevPw) pwm.value = prevPw;
     }
   }
 
